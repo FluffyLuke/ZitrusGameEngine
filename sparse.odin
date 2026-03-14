@@ -6,7 +6,9 @@ Dense_Index :: distinct u64
 SPARSE_PAGE_SIZE :: 4096
 Sparse_Set :: struct($T: typeid) {
     clean_up: proc(this: rawptr, a: T),
-    
+    dense: [dynamic]T,
+    dense_to_entity: [dynamic]Sparse_Index,
+    sparse: [dynamic][SPARSE_PAGE_SIZE]Dense_Index,
 }
 
 // Gets and index to the dense set from COMPONENT! sparse set
