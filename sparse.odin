@@ -3,109 +3,149 @@ package zitrus
 Sparse_Index :: distinct u64
 Dense_Index :: distinct u64
 
+Component_Pointer :: rawptr
+
 SPARSE_PAGE_SIZE :: 4096
-Sparse_Set :: struct($T: typeid) {
-    clean_up: proc(this: rawptr, a: T),
+Sparse_Set :: struct {
+    type_in_set: typeid,
+    data: rawptr,
+    
+    destroy_set: proc(this: rawptr),
+
+    get: proc(this: rawptr, id: Sparse_Index) -> Component_Pointer,
+    set: proc(this: rawptr, id: Sparse_Index, item: Component_Pointer) -> Component_Pointer,
+    delete: proc(this: rawptr, id: Sparse_Index) -> bool,
+
+    get_dense_index: proc(this: rawptr, id: Sparse_Index) -> Dense_Index,
+    set_dense_index: proc(this: rawptr, id: Sparse_Index, index: Dense_Index),
+}
+
+Sparse_Set_Data :: struct($T: typeid) {
     dense: [dynamic]T,
     dense_to_entity: [dynamic]Sparse_Index,
     sparse: [dynamic][SPARSE_PAGE_SIZE]Dense_Index,
 }
 
-// Gets and index to the dense set from COMPONENT! sparse set
-// Returns "default" if no index is found
-sparse_set_get_dense_index :: proc(using sparse_set: ^Sparse_Set($T), id: Sparse_Index) -> Dense_Index {
-    // Index of the page
-    page: u64 = u64(id) / u64(SPARSE_PAGE_SIZE);
-    // Index in that page
-    sparse_index: Sparse_Index = id % SPARSE_PAGE_SIZE;
+// Big ass function
+// Creates new sparse set object
+new_sparse_set :: proc($T: typeid, allocator := context.allocator) -> (sparse_set: Sparse_Set) {
+    sparse_set.type_in_set = T
 
-    // Return index of the component in the sparse set
-    if page < u64(len(sparse)) {
-        sprase := sparse[page];
-        return sprase[sparse_index]
-    }
-
-    return Dense_Index(TOMBSTONE)
-}
-
-sparse_set_insert_dense_index :: proc(using sparse_set: ^Sparse_Set($T), id: Sparse_Index, index: Dense_Index) {
-    // Index of the page
-    page: u64 = u64(id) / u64(SPARSE_PAGE_SIZE);
-    // Index in that page
-    sparse_index: Sparse_Index = id % SPARSE_PAGE_SIZE;
-
-    // Check if new page needs to be allocated
-    // If so, populate it with tombstone
-    if page >= u64(len(sparse)) {
-        resize_dynamic_array(&sparse, page+1)
-        for i in 0..<SPARSE_PAGE_SIZE {
-            sparse[page][i] = Dense_Index(TOMBSTONE)
+    sparse_set.data = new(Sparse_Set_Data(T))
+    sparse_set.get = proc(this: rawptr, id: Sparse_Index) -> Component_Pointer {
+        sparse_set: ^Sparse_Set = (^Sparse_Set)(this)
+        data: ^Sparse_Set_Data(T) = (^Sparse_Set_Data(T))(sparse_set.data)
+        
+        dense_index: Dense_Index = sparse_set.get_dense_index(sparse_set, id)
+    
+        if dense_index != Dense_Index(TOMBSTONE) {
+            return &data.dense[dense_index]
         }
+    
+        return nil
     }
 
-    // Get current sparse page
-    sparse_page: ^[SPARSE_PAGE_SIZE]Dense_Index = &sparse[page];
-    sparse_page[sparse_index] = index;
-}
+    sparse_set.set = proc(this: rawptr, id: Sparse_Index, item: Component_Pointer) -> Component_Pointer{
+        sparse_set: ^Sparse_Set = (^Sparse_Set)(this)
+        data: ^Sparse_Set_Data(T) = (^Sparse_Set_Data(T))(sparse_set.data)
 
-// If item exists it gets updated
-sparse_set_insert :: proc(using sparse_set: ^Sparse_Set($T), id: Sparse_Index, item: T) -> ^T{
-    dense_index: Dense_Index = sparse_set_get_dense_index(sparse_set, id)
-
-    if dense_index != Dense_Index(TOMBSTONE) {
-        dense[dense_index] = item
-        dense_to_entity[dense_index] = id
-
-        return &dense[dense_index]
+        item_deref := (^T)(item)^
+        
+        dense_index: Dense_Index = sparse_set.get_dense_index(sparse_set, id)
+        if dense_index != Dense_Index(TOMBSTONE) {
+            data.dense[dense_index] = item_deref
+            data.dense_to_entity[dense_index] = id
+    
+            return &data.dense[dense_index]
+        }
+    
+        sparse_set.set_dense_index(sparse_set, id, Dense_Index(len(data.dense)))
+        append(&data.dense, item_deref)
+        append(&data.dense_to_entity, id)
+    
+        return &data.dense[len(data.dense)-1]
     }
 
-    sparse_set_insert_dense_index(sparse_set, id, Dense_Index(len(sparse_set.dense)))
-    append(&dense, item)
-    append(&dense_to_entity, id)
+    // Gets and index to the dense set from COMPONENT! sparse set
+    // Returns "default" if no index is found
+    sparse_set.get_dense_index = proc(this: rawptr, id: Sparse_Index) -> Dense_Index {
+        sparse_set: ^Sparse_Set = (^Sparse_Set)(this)
+        data: ^Sparse_Set_Data(T) = (^Sparse_Set_Data(T))(sparse_set.data)
 
-    return &dense[len(dense)-1]
-}
+        // Index of the page
+        page: u64 = u64(id) / u64(SPARSE_PAGE_SIZE);
+        // Index in that page
+        sparse_index: Sparse_Index = id % SPARSE_PAGE_SIZE;
+        // Return index of the component in the sparse set
+        if page < u64(len(data.sparse)) {
+            sprase := data.sparse[page];
+            return sprase[sparse_index]
+        }
 
-sparse_set_get :: proc(using sparse_set: ^Sparse_Set($T), id: Sparse_Index) -> ^T{
-    dense_index: Dense_Index = sparse_set_get_dense_index(sparse_set, id)
-
-    if dense_index != Dense_Index(TOMBSTONE) {
-        return &dense[dense_index]
+        return Dense_Index(TOMBSTONE)
     }
 
-    return nil
-}
-
-sparse_set_delete :: proc(using sparse_set: ^Sparse_Set($T), id: Sparse_Index) -> bool{
-    dense_index: Dense_Index = sparse_set_get_dense_index(sparse_set, id)
-
-    if dense_index == Dense_Index(TOMBSTONE) {
-        return false
+    sparse_set.set_dense_index = proc(this: rawptr, id: Sparse_Index, index: Dense_Index) {
+        sparse_set: ^Sparse_Set = (^Sparse_Set)(this)
+        data: ^Sparse_Set_Data(T) = (^Sparse_Set_Data(T))(sparse_set.data)
+        // Index of the page
+        page: u64 = u64(id) / u64(SPARSE_PAGE_SIZE);
+        // Index in that page
+        sparse_index: Sparse_Index = id % SPARSE_PAGE_SIZE;
+    
+        // Check if new page needs to be allocated
+        // If so, populate it with tombstone
+        if page >= u64(len(data.sparse)) {
+            resize_dynamic_array(&data.sparse, page+1)
+            for i in 0..<SPARSE_PAGE_SIZE {
+                data.sparse[page][i] = Dense_Index(TOMBSTONE)
+            }
+        }
+    
+        // Get current sparse page
+        sparse_page: ^[SPARSE_PAGE_SIZE]Dense_Index = &data.sparse[page];
+        sparse_page[sparse_index] = index;
     }
 
-    // Change places of last element and element that needs to be deleted
-    // Or simpler - just override deleted element with the last
-    dense[dense_index] = dense[len(dense)-1]
-    moved_element_index: Sparse_Index = dense_to_entity[len(dense)-1]
+    sparse_set.delete = proc(this: rawptr, id: Sparse_Index) -> bool{
+        sparse_set: ^Sparse_Set = (^Sparse_Set)(this)
+        data: ^Sparse_Set_Data(T) = (^Sparse_Set_Data(T))(sparse_set.data)
 
-    pop(&dense_to_entity)
-    pop(&dense)
+        dense_index: Dense_Index = sparse_set.get_dense_index(sparse_set, id)
+    
+        if dense_index == Dense_Index(TOMBSTONE) {
+            return false
+        }
+    
+        // Change places of last element and element that needs to be deleted
+        // Or simpler - just override deleted element with the last
+        data.dense[dense_index] = data.dense[len(data.dense)-1]
+        moved_element_index: Sparse_Index = data.dense_to_entity[len(data.dense)-1]
+    
+        pop(&data.dense_to_entity)
+        pop(&data.dense)
+    
+        // Set sparse index of deleted element to TOMBSTONE
+        page: u64 = u64(id) / u64(SPARSE_PAGE_SIZE);
+        sparse_index: u64 = u64(id) % u64(SPARSE_PAGE_SIZE);
+        data.sparse[page][sparse_index] = Dense_Index(TOMBSTONE)
+    
+        // Update sparse/dense index of moved element
+        page = u64(moved_element_index) / u64(SPARSE_PAGE_SIZE);
+        sparse_index = u64(moved_element_index % SPARSE_PAGE_SIZE);
+        data.sparse[page][sparse_index] = dense_index
+    
+        return true
+    }
 
-    // Set sparse index of deleted element to TOMBSTONE
-    page: u64 = u64(id) / u64(SPARSE_PAGE_SIZE);
-    sparse_index: u64 = u64(id) % u64(SPARSE_PAGE_SIZE);
-    sparse[page][sparse_index] = Dense_Index(TOMBSTONE)
+    sparse_set.destroy_set = proc(this: rawptr) {
+        sparse_set: ^Sparse_Set = (^Sparse_Set)(this)
+        data: ^Sparse_Set_Data(T) = (^Sparse_Set_Data(T))(sparse_set.data)
+        delete(data.dense)
+        delete(data.dense_to_entity)
+        delete(data.sparse)
+    }
 
-    // Update sparse/dense index of moved element
-    page = u64(moved_element_index) / u64(SPARSE_PAGE_SIZE);
-    sparse_index = u64(moved_element_index % SPARSE_PAGE_SIZE);
-    sparse[page][sparse_index] = dense_index
-
-    return true
+    return
 }
 
-destroy_sparse_set :: proc(using set: ^Sparse_Set($T)) {
-    delete(dense)
-    delete(dense_to_entity)
-    delete(sparse)
-}
