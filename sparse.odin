@@ -144,6 +144,7 @@ new_sparse_set :: proc($T: typeid, allocator := context.allocator) -> (sparse_se
         delete(data.dense)
         delete(data.dense_to_entity)
         delete(data.sparse)
+        free(data)
     }
 
     return

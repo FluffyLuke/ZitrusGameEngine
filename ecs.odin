@@ -37,12 +37,18 @@ init_heart :: proc(using heart: ^Zitrus_Heart) {
 }
 
 destroy_heart :: proc(using heart: ^Zitrus_Heart) {
-    delete(component_bit)
-    delete(component_pools)
     entity_masks.destroy_set(&entity_masks)
+
     for _, &v in entity_groups {
         v.destroy_set(&v)
     }
+
+    for _, &v in component_pools {
+        v.destroy_set(&v)
+    }
+
+    delete(component_bit)
+    delete(component_pools)
 }
 
 Entity_Heart :: struct {
@@ -73,10 +79,9 @@ destroy_entity :: proc(using heart: ^Zitrus_Heart, id: Entity_ID) -> bool {
     
     append(&free_entities, id)
 
-    // for k, v in component_pools {
-    //     v.clean_up
-    //     set := &component_pools[k].(Sparse_Set(k))
-    // }
+    for k, &set in component_pools {
+        set.destroy_set(&set)
+    }
 
     return true
 }
