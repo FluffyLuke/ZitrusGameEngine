@@ -1,6 +1,7 @@
 package zitrus
 
 import "core:fmt"
+import "core:mem"
 
 // https://github.com/chrischristakis/seecs/blob/master/seecs.h
 // https://www.youtube.com/watch?v=yyZMoE1FAJ0
@@ -32,14 +33,19 @@ init_heart :: proc(using heart: ^Zitrus_Heart) {
     next_bit_mask = 0
     entity_masks = new_sparse_set(Component_Mask)
 
-    component_pools = {}
-    entity_groups = {}
+    // Use make to allocate the hash table header
+    // component_pools = make(map[typeid]Sparse_Set)
+    // entity_groups = make(map[Component_Mask]Sparse_Set)
+    
+    // component_bit can also be initialized here
+    // component_bit = make(map[typeid]int)
 }
 
 destroy_heart :: proc(using heart: ^Zitrus_Heart) {
     entity_masks.destroy_set(&entity_masks)
 
-    for _, &v in entity_groups {
+    defer delete(entity_groups)
+    for s, &v in entity_groups {
         v.destroy_set(&v)
     }
 
@@ -52,7 +58,8 @@ destroy_heart :: proc(using heart: ^Zitrus_Heart) {
 }
 
 Entity_Heart :: struct {
-    pos: Vector3,
+    position: Vector3,
+    rotation: quaternion128,
 }
 
 Entity_Alive :: struct {
@@ -92,6 +99,15 @@ register_component :: proc(using heart: ^Zitrus_Heart, component: $T) {
     next_bit_mask += 1
 }
 
+get_component :: proc(using heart: ^Zitrus_Heart, id: Entity_ID, $T: typeid) -> (^T, bool) {
+    if p, ok := component_pools[T]; !ok {
+        return nil, false
+    }
+    set := &component_pools[T]
+    component_ref: Component_Pointer = set.get(set, id)
+    return (^T)(component_ref), true
+}
+
 set_component :: proc(using heart: ^Zitrus_Heart, id: Entity_ID, component: $T) -> ^T {
     if p, ok := component_pools[T]; !ok {
         register_component(heart, component)
@@ -121,34 +137,63 @@ has_component :: proc(using heart: ^Zitrus_Heart, id: Entity_ID, T: typeid) -> b
 
 add_to_bitset :: proc(using heart: ^Zitrus_Heart, id: Entity_ID, component_type: typeid) -> bool {
     // Get entity's bit set and remove entity from current group
-    bitset := (^Component_Mask)(entity_masks.get(&entity_masks, id))
-    if bitset == nil {
-        fmt.eprintfln("Cannot find bitset of type: \"%s\"", component_type)
+    bitset_ptr := (^Component_Mask)(entity_masks.get(&entity_masks, id))
+    if bitset_ptr == nil {
         return false
     }
+    bitset := bitset_ptr^
 
-    group, ok := &entity_groups[bitset^]
+    group, ok := &entity_groups[bitset]
     if ok {
-        group.delete(&group, id)
+        group.delete(group, id)
+        if group.number_of_items == 0 {
+            group.destroy_set(group)
+            delete_key(&entity_groups, bitset)
+        }
     }
 
     bit := component_bit[component_type]
+    bitset += {bit}
+    
+    group, ok = &entity_groups[bitset]
+    if !ok {
+        entity_groups[bitset] = new_sparse_set(Entity_ID)
+        group = &entity_groups[bitset]
+    }
+
+    id_copy := id
+    group.set(group, id, &id_copy)
+    entity_masks.set(&entity_masks, id, &bitset)
 
     return true
 }
+// TODO: find an alternative to long entity_id array
+View :: struct {
+    entities: [dynamic]Entity_ID
+}
 
-query :: proc(using heart: Zitrus_Heart, e: Entity_ID, $T: typeid) -> ^T {
-    if p, ok = component_pools[T]; ok {
-        component_pools[T] = make(map[typeid]any) 
+view :: proc(using heart: ^Zitrus_Heart, component_types: ..typeid) -> (view: View) {
+    target_mask := Component_Mask {}
+    for t in component_types {
+        target_mask += {component_bit[t]}
     }
+    
+    matches := [dynamic]Entity_ID_Sparse_Set {}
+    defer delete(matches)
+    for group_mask, entities_set in heart.entity_groups {
+        if (group_mask & target_mask) == target_mask {
+            append(&matches, entities_set)
+        }
+    }
+
+    for m in matches {
+        data: ^Sparse_Set_Data(Entity_ID) = (^Sparse_Set_Data(Entity_ID))(m.data)
+        append(&view.entities, ..data.dense[:])
+    }
+
+    return
 }
 
-Transform_Component :: struct {
-    position: Vector3,
-    rotation: quaternion128,
+destroy_view :: proc(view: ^View) {
+    delete(view.entities)
 }
-
-// Query :: struct {
-//     ids: [4096]Entity
-//     components: []
-// }

@@ -1,4 +1,5 @@
 package zitrus
+import "core:fmt"
 
 Sparse_Index :: distinct u64
 Dense_Index :: distinct u64
@@ -8,6 +9,7 @@ Component_Pointer :: rawptr
 SPARSE_PAGE_SIZE :: 4096
 Sparse_Set :: struct {
     type_in_set: typeid,
+    number_of_items: u64,
     data: rawptr,
     
     destroy_set: proc(this: rawptr),
@@ -31,7 +33,7 @@ Sparse_Set_Data :: struct($T: typeid) {
 new_sparse_set :: proc($T: typeid, allocator := context.allocator) -> (sparse_set: Sparse_Set) {
     sparse_set.type_in_set = T
 
-    sparse_set.data = new(Sparse_Set_Data(T))
+    sparse_set.data = new(Sparse_Set_Data(T), allocator)
     sparse_set.get = proc(this: rawptr, id: Sparse_Index) -> Component_Pointer {
         sparse_set: ^Sparse_Set = (^Sparse_Set)(this)
         data: ^Sparse_Set_Data(T) = (^Sparse_Set_Data(T))(sparse_set.data)
@@ -58,6 +60,8 @@ new_sparse_set :: proc($T: typeid, allocator := context.allocator) -> (sparse_se
     
             return &data.dense[dense_index]
         }
+
+        sparse_set.number_of_items += 1;
     
         sparse_set.set_dense_index(sparse_set, id, Dense_Index(len(data.dense)))
         append(&data.dense, item_deref)
@@ -112,10 +116,11 @@ new_sparse_set :: proc($T: typeid, allocator := context.allocator) -> (sparse_se
         data: ^Sparse_Set_Data(T) = (^Sparse_Set_Data(T))(sparse_set.data)
 
         dense_index: Dense_Index = sparse_set.get_dense_index(sparse_set, id)
-    
+
         if dense_index == Dense_Index(TOMBSTONE) {
             return false
         }
+        sparse_set.number_of_items -= 1;
     
         // Change places of last element and element that needs to be deleted
         // Or simpler - just override deleted element with the last
