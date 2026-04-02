@@ -1,7 +1,9 @@
 package zitrus
 
 import "core:fmt"
-import "core:mem"
+import sdl "vendor:sdl3"
+import "core:os"
+import "core:path/filepath"
 
 // https://github.com/chrischristakis/seecs/blob/master/seecs.h
 // https://www.youtube.com/watch?v=yyZMoE1FAJ0
@@ -16,7 +18,17 @@ Component_Mask :: bit_set[0..<MAX_COMPONENTS]
 Component_Mask_Sparse_Set :: Sparse_Set
 Entity_ID_Sparse_Set :: Sparse_Set
 
+ASSET_ROOT :: "/assets/"
+SHADERS_ROOT :: "/shaders/"
+
 Zitrus_Heart :: struct {
+    meta: struct {
+        exe_path: string,
+    },
+
+    renderer: Renderer,
+    asset_manager: Asset_Manager,
+
     next_id: Entity_ID,
     free_entities: [dynamic]Entity_ID,
     component_pools: map[typeid]Sparse_Set,
@@ -28,33 +40,47 @@ Zitrus_Heart :: struct {
     entity_groups: map[Component_Mask]Entity_ID_Sparse_Set,
 }
 
-init_heart :: proc(using heart: ^Zitrus_Heart) {
-    next_id = 0
-    next_bit_mask = 0
-    entity_masks = new_sparse_set(Component_Mask)
+init_heart :: proc(z: ^Zitrus_Heart) {
+    z.next_id = 0
+    z.next_bit_mask = 0
+    z.entity_masks = new_sparse_set(Component_Mask)
 
-    // Use make to allocate the hash table header
-    // component_pools = make(map[typeid]Sparse_Set)
-    // entity_groups = make(map[Component_Mask]Sparse_Set)
-    
-    // component_bit can also be initialized here
-    // component_bit = make(map[typeid]int)
+    exe_path, err := os.get_executable_directory(context.allocator)
+
+    if err != os.ERROR_NONE {
+        fmt.printfln("ERROR: Cannot load executable's path: %s", err)
+        os.exit(-1)
+    }
+
+    z.meta.exe_path = exe_path
+
+    if !init_renderer(&z.renderer, z.meta.exe_path) {
+        fmt.printfln("ERROR: Cannot init renderer - exiting...")
+        os.exit(-1)
+    }
+
+    init_asset_manager(&z.asset_manager, z.meta.exe_path)
 }
 
-destroy_heart :: proc(using heart: ^Zitrus_Heart) {
-    entity_masks.destroy_set(&entity_masks)
+destroy_heart :: proc(z: ^Zitrus_Heart) {
+    z.entity_masks.destroy_set(&z.entity_masks)
 
-    defer delete(entity_groups)
-    for s, &v in entity_groups {
+    defer delete(z.entity_groups)
+    for s, &v in z.entity_groups {
         v.destroy_set(&v)
     }
 
-    for _, &v in component_pools {
+    for _, &v in z.component_pools {
         v.destroy_set(&v)
     }
 
-    delete(component_bit)
-    delete(component_pools)
+    delete(z.component_bit)
+    delete(z.component_pools)
+    delete(z.meta.exe_path)
+
+    delete_map(z.asset_manager.image_assets)
+
+    destroy_renderer(&z.renderer)
 }
 
 Entity_Heart :: struct {
@@ -70,50 +96,50 @@ Entity_Dying :: struct {
 
 }
 
-create_entity :: proc(using heart: ^Zitrus_Heart) -> (index: Entity_ID) {
-    index = next_id
-    heart.next_id += 1;
-    entity_masks.set(&entity_masks, index, &Component_Mask {0})
+create_entity :: proc(z: ^Zitrus_Heart) -> (index: Entity_ID) {
+    index = z.next_id
+    z.next_id += 1;
+    z.entity_masks.set(&z.entity_masks, index, &Component_Mask {0})
 
-    set_component(heart, index, Entity_Alive{})
+    set_component(z, index, Entity_Alive{})
     return
 }
 
-destroy_entity :: proc(using heart: ^Zitrus_Heart, id: Entity_ID) -> bool {
-    if !has_component(heart, id, typeid_of(Entity_Alive)) {
+destroy_entity :: proc(z: ^Zitrus_Heart, id: Entity_ID) -> bool {
+    if !has_component(z, id, typeid_of(Entity_Alive)) {
         return false
     }
     
-    append(&free_entities, id)
+    append(&z.free_entities, id)
 
-    for k, &set in component_pools {
+    for k, &set in z.component_pools {
         set.destroy_set(&set)
     }
 
     return true
 }
 
-register_component :: proc(using heart: ^Zitrus_Heart, component: $T) {
-    component_pools[T] = new_sparse_set(T)
-    component_bit[T] = next_bit_mask
-    next_bit_mask += 1
+register_component :: proc(z: ^Zitrus_Heart, component: $T) {
+    z.component_pools[T] = new_sparse_set(T)
+    z.component_bit[T] = z.next_bit_mask
+    z.next_bit_mask += 1
 }
 
-get_component :: proc(using heart: ^Zitrus_Heart, id: Entity_ID, $T: typeid) -> (^T, bool) {
-    if p, ok := component_pools[T]; !ok {
+get_component :: proc(z: ^Zitrus_Heart, id: Entity_ID, $T: typeid) -> (^T, bool) {
+    if p, ok := z.component_pools[T]; !ok {
         return nil, false
     }
-    set := &component_pools[T]
+    set := &z.component_pools[T]
     component_ref: Component_Pointer = set.get(set, id)
     return (^T)(component_ref), true
 }
 
-set_component :: proc(using heart: ^Zitrus_Heart, id: Entity_ID, component: $T) -> ^T {
-    if p, ok := component_pools[T]; !ok {
-        register_component(heart, component)
+set_component :: proc(z: ^Zitrus_Heart, id: Entity_ID, component: $T) -> ^T {
+    if p, ok := z.component_pools[T]; !ok {
+        register_component(z, component)
     }
-    set := &component_pools[T]
-    add_to_bitset(heart, id, T)
+    set := &z.component_pools[T]
+    add_to_bitset(z, id, T)
     // FIX: find better alternative than copying component
     copy := component
 
@@ -121,13 +147,13 @@ set_component :: proc(using heart: ^Zitrus_Heart, id: Entity_ID, component: $T) 
     return (^T)(component_ref)
 }
 
-has_component :: proc(using heart: ^Zitrus_Heart, id: Entity_ID, T: typeid) -> bool {
-    entity_mask := (^Component_Mask)(entity_masks.get(&entity_masks, id))
+has_component :: proc(z: ^Zitrus_Heart, id: Entity_ID, T: typeid) -> bool {
+    entity_mask := (^Component_Mask)(z.entity_masks.get(&z.entity_masks, id))
     if entity_mask == nil {
         return false
     }
 
-    c_bit, ok := component_bit[T]
+    c_bit, ok := z.component_bit[T]
     if !ok {
         return false
     }
@@ -135,35 +161,35 @@ has_component :: proc(using heart: ^Zitrus_Heart, id: Entity_ID, T: typeid) -> b
     return (c_bit in entity_mask^)
 }
 
-add_to_bitset :: proc(using heart: ^Zitrus_Heart, id: Entity_ID, component_type: typeid) -> bool {
+add_to_bitset :: proc(z: ^Zitrus_Heart, id: Entity_ID, component_type: typeid) -> bool {
     // Get entity's bit set and remove entity from current group
-    bitset_ptr := (^Component_Mask)(entity_masks.get(&entity_masks, id))
+    bitset_ptr := (^Component_Mask)(z.entity_masks.get(&z.entity_masks, id))
     if bitset_ptr == nil {
         return false
     }
     bitset := bitset_ptr^
 
-    group, ok := &entity_groups[bitset]
+    group, ok := &z.entity_groups[bitset]
     if ok {
         group.delete(group, id)
         if group.number_of_items == 0 {
             group.destroy_set(group)
-            delete_key(&entity_groups, bitset)
+            delete_key(&z.entity_groups, bitset)
         }
     }
 
-    bit := component_bit[component_type]
+    bit := z.component_bit[component_type]
     bitset += {bit}
     
-    group, ok = &entity_groups[bitset]
+    group, ok = &z.entity_groups[bitset]
     if !ok {
-        entity_groups[bitset] = new_sparse_set(Entity_ID)
-        group = &entity_groups[bitset]
+        z.entity_groups[bitset] = new_sparse_set(Entity_ID)
+        group = &z.entity_groups[bitset]
     }
 
     id_copy := id
     group.set(group, id, &id_copy)
-    entity_masks.set(&entity_masks, id, &bitset)
+    z.entity_masks.set(&z.entity_masks, id, &bitset)
 
     return true
 }
@@ -172,15 +198,15 @@ View :: struct {
     entities: [dynamic]Entity_ID
 }
 
-view :: proc(using heart: ^Zitrus_Heart, component_types: ..typeid) -> (view: View) {
+view :: proc(z: ^Zitrus_Heart, component_types: ..typeid) -> (view: View) {
     target_mask := Component_Mask {}
     for t in component_types {
-        target_mask += {component_bit[t]}
+        target_mask += {z.component_bit[t]}
     }
     
     matches := [dynamic]Entity_ID_Sparse_Set {}
     defer delete(matches)
-    for group_mask, entities_set in heart.entity_groups {
+    for group_mask, entities_set in z.entity_groups {
         if (group_mask & target_mask) == target_mask {
             append(&matches, entities_set)
         }
