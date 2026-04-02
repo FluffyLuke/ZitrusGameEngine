@@ -1,8 +1,10 @@
 package zitrus
 
 import "core:fmt"
-import str "core:strings"
 import "core:os"
+import "core:time"
+import str "core:strings"
+import la "core:math/linalg"
 
 import gl "vendor:OpenGL"
 import sdl "vendor:sdl3"
@@ -39,6 +41,8 @@ init_renderer :: proc(r: ^Renderer, exe_path: String_Ref) -> bool {
     r.basic_material = link_to_program(r, vertex_shader, fragment_shader) or_return
     gl.DeleteShader(vertex_shader)
     gl.DeleteShader(fragment_shader)
+
+    gl.Enable(gl.DEPTH_TEST)
 
     return true
 }
@@ -133,7 +137,7 @@ render :: proc(z: ^Zitrus_Heart) {
     r := &z.renderer
 
     gl.ClearColor(0.2, 0.2, 0.3, 1)
-    gl.Clear(gl.COLOR_BUFFER_BIT)
+    gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
     gl.UseProgram(r.basic_material)
     
@@ -141,10 +145,34 @@ render :: proc(z: ^Zitrus_Heart) {
     for e in view.entities {
         m_c, ok := get_component(z, e, Mesh_Component)
 
+        // Model matrix
+        // Set scale, rotation and position
+        model_matrix := Identity_Matrix
+        model_matrix = model_matrix * la.matrix4_rotate(la.to_radians(f32(-55.0)), Vec3 {1, 0, 0})
+        model_matrix = la.matrix4_rotate(f32(delta_time) * la.to_radians(f32(50.0)), Vec3 {0.5, 1, 0})
+
+        // View matrix
+        view_matrix := Identity_Matrix
+        view_matrix = view_matrix * la.matrix4_translate(Vec3 {0, 0, -3.0})
+
+        // projection matrix
+        projection_matrix := Identity_Matrix
+        projection_matrix = projection_matrix * la.matrix4_perspective(f32(la.to_radians(45.0)), 800.0 / 600.0, 0.1, 100.0)
+
+        // vieport transform in shader
+        model_loc := gl.GetUniformLocation(r.basic_material, "model")
+        view_loc := gl.GetUniformLocation(r.basic_material, "view")
+        projection_loc := gl.GetUniformLocation(r.basic_material, "projection")
+        
+        gl.UniformMatrix4fv(model_loc, 1, gl.FALSE, cast(^f32)&model_matrix)
+        gl.UniformMatrix4fv(view_loc, 1, gl.FALSE, cast(^f32)&view_matrix)
+        gl.UniformMatrix4fv(projection_loc, 1, gl.FALSE, cast(^f32)&projection_matrix)
+
         gl.ActiveTexture(gl.TEXTURE0)
         gl.BindTexture(gl.TEXTURE_2D, m_c.texture.texture_id);
         gl.BindVertexArray(m_c.vao)
-        gl.DrawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, nil)
+        // gl.DrawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, nil)
+        gl.DrawArrays(gl.TRIANGLES, 0, 36)
     }
     destroy_view(&view)
 

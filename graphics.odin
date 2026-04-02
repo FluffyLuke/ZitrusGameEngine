@@ -31,7 +31,7 @@ Image_Multiple :: struct {
 
 Image_Asset :: struct {
     id: Image_Resource_ID,
-    dimensions: Vector2,
+    dimensions: Vec2,
     texture_id: Texture_GL_Id,
     type: union {
         Image_Single,

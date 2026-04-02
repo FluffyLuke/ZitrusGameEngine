@@ -1,9 +1,10 @@
 package zitrus
 
 import "core:fmt"
-import sdl "vendor:sdl3"
 import "core:os"
-import "core:path/filepath"
+import "core:time"
+
+import sdl "vendor:sdl3"
 
 // https://github.com/chrischristakis/seecs/blob/master/seecs.h
 // https://www.youtube.com/watch?v=yyZMoE1FAJ0
@@ -21,9 +22,12 @@ Entity_ID_Sparse_Set :: Sparse_Set
 ASSET_ROOT :: "/assets/"
 SHADERS_ROOT :: "/shaders/"
 
+delta_time: f64
+
 Zitrus_Heart :: struct {
     meta: struct {
         exe_path: string,
+        previous_frame: time.Time
     },
 
     renderer: Renderer,
@@ -60,6 +64,15 @@ init_heart :: proc(z: ^Zitrus_Heart) {
     }
 
     init_asset_manager(&z.asset_manager, z.meta.exe_path)
+
+    // TODO: Can cause potential problems in the future in the first frame of the game
+    z.meta.previous_frame = time.now()
+}
+
+update_heart :: proc(z: ^Zitrus_Heart) {
+    now := time.now()
+    diff := time.diff(z.meta.previous_frame, now)
+    delta_time = time.duration_seconds(diff)
 }
 
 destroy_heart :: proc(z: ^Zitrus_Heart) {
@@ -84,7 +97,7 @@ destroy_heart :: proc(z: ^Zitrus_Heart) {
 }
 
 Entity_Heart :: struct {
-    position: Vector3,
+    position: Vec3,
     rotation: quaternion128,
 }
 
