@@ -1,5 +1,6 @@
 package zitrus
 
+import "libs:zitrus"
 import "core:fmt"
 import "core:os"
 import "core:time"
@@ -23,9 +24,16 @@ Entity_ID_Sparse_Set :: Sparse_Set
 ASSET_ROOT :: "/assets/"
 SHADERS_ROOT :: "/shaders/"
 
+Level :: struct {
+    label: u32,
+    // custom_data: rawptr,
+    start: proc(heart: ^Zitrus_Heart),  // Initialize level
+    update: proc(heart: ^Zitrus_Heart), // Update logic
+    end: proc(heart: ^Zitrus_Heart)     // Deallocate stuff
+}
+
 delta_time: f64
 total_time: f64
-
 Zitrus_Heart :: struct {
     meta: struct {
         exe_path: string,
@@ -44,11 +52,11 @@ Zitrus_Heart :: struct {
         fov: f32
     },
 
-    // mouse: struct {
-    //     last_position: Vec2,
-    //     yaw: f32,
-    //     pitch: f32,
-    // },
+    level_data: struct {
+        should_quit: bool,
+        current_level: u32,
+        levels: []Level,
+    },
 
     next_id: Entity_ID,
     free_entities: [dynamic]Entity_ID,
@@ -61,7 +69,8 @@ Zitrus_Heart :: struct {
     entity_groups: map[Component_Mask]Entity_ID_Sparse_Set,
 }
 
-init_heart :: proc(z: ^Zitrus_Heart) {
+// This takes ownership of the "levels" slice. It should be allocated on heap
+init_heart :: proc(z: ^Zitrus_Heart, levels: []Level) {
     z.next_id = 0
     z.next_bit_mask = 0
     z.entity_masks = new_sparse_set(Component_Mask)
@@ -94,19 +103,97 @@ init_heart :: proc(z: ^Zitrus_Heart) {
         fov = 45.0,
     }
 
-    init_asset_manager(&z.asset_manager, z.meta.exe_path)
+    init_asset_manager(z, z.meta.exe_path)
 
     // TODO: Can cause potential problems in the future in the first frame of the game
     z.meta.previous_frame = time.now()
+
+    // Init first level
+    z.level_data.levels = levels
+    z.level_data.levels[0].start(z)
 }
 
-update_heart :: proc(z: ^Zitrus_Heart) {
+update_heart :: proc(z: ^Zitrus_Heart) -> bool {
+    // Update internal data
     now := time.now()
     diff := time.diff(z.meta.previous_frame, now)
     delta_time = time.duration_seconds(diff)
     total_time += delta_time
-
     z.meta.previous_frame = now
+
+    // Check for events
+    event: sdl.Event
+    for sdl.PollEvent(&event){
+        if event.type == .QUIT {
+            z.level_data.should_quit = true
+        }
+        process_input_event(z, event)
+    }
+    process_input(z)
+
+    lvl := &z.level_data
+    lvl.levels[lvl.current_level].update(z)
+
+    // Render and free memory
+    render(z)
+    free_all(context.temp_allocator)
+
+    if z.level_data.should_quit {
+        lvl.levels[lvl.current_level].end(z)
+        asset_manager_unload_textures(z)
+    }
+
+    return z.level_data.should_quit
+}
+
+process_input_event :: proc(z: ^Zitrus_Heart, event: sdl.Event) {
+    if event.type == .KEY_DOWN {
+        if event.key.key == sdl.K_W {
+            change_level(z, 1)
+        }
+    }
+}
+
+process_input :: proc(z: ^Zitrus_Heart) {
+    
+}
+
+// This function also clears current image assets (deallocates them)
+// and clears current entities
+// it will not however clear other data allocated during "start"
+Level_ID :: u32
+change_level :: proc(z: ^Zitrus_Heart, next_level: Level_ID) -> bool {
+    lvl := &z.level_data
+
+    if next_level > u32(len(lvl.levels)) {
+        fmt.printfln("ERROR: Cannot change level. ID passed: %v", next_level)
+        return false
+    }
+
+    lvl.levels[lvl.current_level].end(z)
+    asset_manager_unload_textures(z)
+    clear_ecs(z)
+
+    lvl.current_level = next_level
+    lvl.levels[lvl.current_level].start(z)
+
+    return true
+}
+
+clear_ecs :: proc(z: ^Zitrus_Heart) {
+    z.entity_masks.clear(&z.entity_masks)
+
+    defer clear(&z.entity_groups)
+    for s, &v in z.entity_groups {
+        v.destroy_set(&v)
+    }
+
+    for _, &v in z.component_pools {
+        v.destroy_set(&v)
+    }
+
+    clear(&z.component_bit)
+    clear(&z.component_pools)
 }
 
 destroy_heart :: proc(z: ^Zitrus_Heart) {
@@ -126,6 +213,7 @@ destroy_heart :: proc(z: ^Zitrus_Heart) {
     delete(z.meta.exe_path)
 
     delete_map(z.asset_manager.image_assets)
+    delete(z.level_data.levels)
 
     destroy_renderer(&z.renderer)
 }

@@ -16,12 +16,14 @@ Asset_Manager :: struct {
     image_assets: map[Image_Resource_ID]Image_Asset,
 }
 
-init_asset_manager :: proc(am: ^Asset_Manager, exe_path: String_Ref) {
+init_asset_manager :: proc(z: ^Zitrus_Heart, exe_path: String_Ref) {
+    am := &z.asset_manager
     am.exe_path = exe_path
 }
 
-load_texture :: proc(am: ^Asset_Manager, relative_path: string) -> (Image_Resource_ID, bool) {
+load_texture :: proc(z: ^Zitrus_Heart, relative_path: string) -> (Image_Resource_ID, bool) {
     defer free_all(context.temp_allocator)
+    am := &z.asset_manager
     
     path := str.concatenate({am.exe_path, ASSET_ROOT, relative_path}, context.temp_allocator)
     path_meta := str.concatenate({path, ".meta"}, context.temp_allocator)
@@ -131,12 +133,14 @@ load_texture :: proc(am: ^Asset_Manager, relative_path: string) -> (Image_Resour
 }
 
 asset_manager_unload_textures :: proc(z: ^Zitrus_Heart) {
+    am := &z.asset_manager
     fmt.printfln("INFO: deleting image assets...")
-    for k, &image in z.asset_manager.image_assets {
+    for k, &image in am.image_assets {
         fmt.printfln("INFO: deleting texture: %s", image.id)
         delete_string(string(k))
         delete_string(string(image.id))
         gl.DeleteTextures(1, &image.texture_id)
     }
+    clear(&am.image_assets)
     fmt.printfln("INFO: deleted all image assets")
 }

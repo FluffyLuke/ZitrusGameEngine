@@ -17,6 +17,7 @@ Sparse_Set :: struct {
     get: proc(this: rawptr, id: Sparse_Index) -> Component_Pointer,
     set: proc(this: rawptr, id: Sparse_Index, item: Component_Pointer) -> Component_Pointer,
     delete: proc(this: rawptr, id: Sparse_Index) -> bool,
+    clear: proc(this: rawptr),
 
     get_dense_index: proc(this: rawptr, id: Sparse_Index) -> Dense_Index,
     set_dense_index: proc(this: rawptr, id: Sparse_Index, index: Dense_Index),
@@ -68,6 +69,15 @@ new_sparse_set :: proc($T: typeid, allocator := context.allocator) -> (sparse_se
         append(&data.dense_to_entity, id)
     
         return &data.dense[len(data.dense)-1]
+    }
+
+    sparse_set.clear= proc(this: rawptr) {
+        sparse_set: ^Sparse_Set = (^Sparse_Set)(this)
+        data: ^Sparse_Set_Data(T) = (^Sparse_Set_Data(T))(sparse_set.data)
+
+        clear(&data.dense)
+        clear(&data.dense_to_entity)
+        clear(&data.sparse)
     }
 
     // Gets and index to the dense set from COMPONENT! sparse set
