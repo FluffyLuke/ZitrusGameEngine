@@ -2,7 +2,6 @@ package zitrus
 
 import "core:fmt"
 import "core:os"
-import "core:time"
 import str "core:strings"
 import la "core:math/linalg"
 
@@ -140,24 +139,31 @@ render :: proc(z: ^Zitrus_Heart) {
     gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
     gl.UseProgram(r.basic_material)
+
+    camera_view := la.matrix4_look_at(
+        z.camera.position, 
+        z.camera.position + z.camera.direction,
+        z.camera.cameraUp
+    )
     
-    view := view(z, Mesh_Component)
+    view := view(z, Mesh)
     for e in view.entities {
-        m_c, ok := get_component(z, e, Mesh_Component)
+        m_c, _ := get_component(z, e, Mesh)
+        h_c, _ := get_component(z, e, Entity_Heart)
 
         // Model matrix
         // Set scale, rotation and position
         model_matrix := Identity_Matrix
-        model_matrix = model_matrix * la.matrix4_rotate(la.to_radians(f32(-55.0)), Vec3 {1, 0, 0})
-        model_matrix = la.matrix4_rotate(f32(delta_time) * la.to_radians(f32(50.0)), Vec3 {0.5, 1, 0})
-
+        model_matrix = model_matrix * la.matrix4_translate(h_c.position)
+        // model_matrix = model_matrix * la.matrix4_rotate(f32(total_time) * la.to_radians(f32(50.0)), Vec3 {0.5, 1, 0})
+        
         // View matrix
         view_matrix := Identity_Matrix
-        view_matrix = view_matrix * la.matrix4_translate(Vec3 {0, 0, -3.0})
+        view_matrix = camera_view
 
         // projection matrix
         projection_matrix := Identity_Matrix
-        projection_matrix = projection_matrix * la.matrix4_perspective(f32(la.to_radians(45.0)), 800.0 / 600.0, 0.1, 100.0)
+        projection_matrix = projection_matrix * la.matrix4_perspective(f32(la.to_radians(z.camera.fov)), 800.0 / 600.0, 0.1, 100.0)
 
         // vieport transform in shader
         model_loc := gl.GetUniformLocation(r.basic_material, "model")

@@ -39,7 +39,7 @@ Image_Asset :: struct {
     }
 }
 
-Mesh_Component :: struct {
+Mesh :: struct {
     texture: Image_Asset,
     verticies: []f32,
     indices: []u32,
@@ -49,28 +49,28 @@ Mesh_Component :: struct {
     vbo: VBO
 }
 
-create_mesh_component :: proc(
+create_mesh :: proc(
     z: ^Zitrus_Heart,
     verticies: []f32, 
     indices: []u32, 
     texture_id: Image_Resource_ID = ""
-) -> (m_c: Mesh_Component, okay: bool = true) {
+) -> (mesh: Mesh, okay: bool = true) {
     // === Setup geometry ===
-    gl.GenVertexArrays(1, &m_c.vao)
-    gl.BindVertexArray(m_c.vao)
+    gl.GenVertexArrays(1, &mesh.vao)
+    gl.BindVertexArray(mesh.vao)
 
-    m_c.verticies = make([]f32, len(verticies))
-    m_c.indices = make([]u32, len(indices))
+    mesh.verticies = make([]f32, len(verticies))
+    mesh.indices = make([]u32, len(indices))
 
-    copy(m_c.verticies, verticies)
-    copy(m_c.indices, indices)
+    copy(mesh.verticies, verticies)
+    copy(mesh.indices, indices)
 
-    gl.GenBuffers(1, &m_c.ebo)
-    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, m_c.ebo)
-    gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(m_c.indices) * size_of(u32), raw_data(m_c.indices), gl.STATIC_DRAW)
+    gl.GenBuffers(1, &mesh.ebo)
+    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.ebo)
+    gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(mesh.indices) * size_of(u32), raw_data(mesh.indices), gl.STATIC_DRAW)
 
-    gl.GenBuffers(1, &m_c.vbo)
-    gl.BindBuffer(gl.ARRAY_BUFFER, m_c.vbo)
+    gl.GenBuffers(1, &mesh.vbo)
+    gl.BindBuffer(gl.ARRAY_BUFFER, mesh.vbo)
     gl.BufferData(gl.ARRAY_BUFFER, len(verticies) * size_of(f32), raw_data(verticies), gl.STATIC_DRAW)
 
     gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 5 * size_of(f32), uintptr(0))
@@ -98,16 +98,16 @@ create_mesh_component :: proc(
         return
     }
 
-    m_c.texture = image_asset
+    mesh.texture = image_asset
 
     return
 }
 
-delete_mesh_component :: proc(m_c: ^Mesh_Component) {
-    gl.DeleteVertexArrays(1, &m_c.vao)
-    gl.DeleteBuffers(1, &m_c.ebo)
-    gl.DeleteBuffers(1, &m_c.vbo)
+delete_mesh :: proc(mesh: ^Mesh) {
+    gl.DeleteVertexArrays(1, &mesh.vao)
+    gl.DeleteBuffers(1, &mesh.ebo)
+    gl.DeleteBuffers(1, &mesh.vbo)
 
-    delete(m_c.indices)
-    delete(m_c.verticies)
+    delete(mesh.indices)
+    delete(mesh.verticies)
 }

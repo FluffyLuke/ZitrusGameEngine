@@ -3,6 +3,7 @@ package zitrus
 import "core:fmt"
 import "core:os"
 import "core:time"
+import la "core:math/linalg"
 
 import sdl "vendor:sdl3"
 
@@ -23,6 +24,7 @@ ASSET_ROOT :: "/assets/"
 SHADERS_ROOT :: "/shaders/"
 
 delta_time: f64
+total_time: f64
 
 Zitrus_Heart :: struct {
     meta: struct {
@@ -32,6 +34,21 @@ Zitrus_Heart :: struct {
 
     renderer: Renderer,
     asset_manager: Asset_Manager,
+
+    camera: struct {
+        position: Vec3,
+        direction: Vec3,
+        cameraRight: Vec3,
+        cameraUp: Vec3,
+
+        fov: f32
+    },
+
+    // mouse: struct {
+    //     last_position: Vec2,
+    //     yaw: f32,
+    //     pitch: f32,
+    // },
 
     next_id: Entity_ID,
     free_entities: [dynamic]Entity_ID,
@@ -63,6 +80,20 @@ init_heart :: proc(z: ^Zitrus_Heart) {
         os.exit(-1)
     }
 
+    position: Vec3 = {0, 0, 3.0}
+    target: Vec3 = {0, 0, 0}
+    direction: Vec3 = (target - position)
+    right: Vec3 = la.normalize(la.cross(Vec3 {0, 1, 0}, direction))
+    up: Vec3 = la.cross(direction, right)
+
+    z.camera = {
+        position = position,
+        direction = direction,
+        cameraRight = right,
+        cameraUp = up,
+        fov = 45.0,
+    }
+
     init_asset_manager(&z.asset_manager, z.meta.exe_path)
 
     // TODO: Can cause potential problems in the future in the first frame of the game
@@ -73,6 +104,9 @@ update_heart :: proc(z: ^Zitrus_Heart) {
     now := time.now()
     diff := time.diff(z.meta.previous_frame, now)
     delta_time = time.duration_seconds(diff)
+    total_time += delta_time
+
+    z.meta.previous_frame = now
 }
 
 destroy_heart :: proc(z: ^Zitrus_Heart) {
@@ -101,19 +135,15 @@ Entity_Heart :: struct {
     rotation: quaternion128,
 }
 
-Entity_Alive :: struct {
-
-}
-
-Entity_Dying :: struct {
-
-}
+Entity_Alive :: struct {}
+Entity_Dying :: struct {}
 
 create_entity :: proc(z: ^Zitrus_Heart) -> (index: Entity_ID) {
     index = z.next_id
     z.next_id += 1;
     z.entity_masks.set(&z.entity_masks, index, &Component_Mask {0})
 
+    set_component(z, index, Entity_Heart{})
     set_component(z, index, Entity_Alive{})
     return
 }
