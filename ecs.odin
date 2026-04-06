@@ -1,6 +1,5 @@
 package zitrus
 
-import "libs:zitrus"
 import "core:fmt"
 import "core:os"
 import "core:time"
@@ -42,6 +41,7 @@ Zitrus_Heart :: struct {
 
     renderer: Renderer,
     asset_manager: Asset_Manager,
+    input_data: Input_Data,
 
     camera: struct {
         position: Vec3,
@@ -70,7 +70,7 @@ Zitrus_Heart :: struct {
 }
 
 // This takes ownership of the "levels" slice. It should be allocated on heap
-init_heart :: proc(z: ^Zitrus_Heart, levels: []Level) {
+init_heart :: proc(z: ^Zitrus_Heart, levels: []Level, action_map: map[int]Input_Key) {
     z.next_id = 0
     z.next_bit_mask = 0
     z.entity_masks = new_sparse_set(Component_Mask)
@@ -104,6 +104,7 @@ init_heart :: proc(z: ^Zitrus_Heart, levels: []Level) {
     }
 
     init_asset_manager(z, z.meta.exe_path)
+    configurate_input(z, action_map)
 
     // TODO: Can cause potential problems in the future in the first frame of the game
     z.meta.previous_frame = time.now()
@@ -127,8 +128,10 @@ update_heart :: proc(z: ^Zitrus_Heart) -> bool {
         if event.type == .QUIT {
             z.level_data.should_quit = true
         }
+        update_input_event(z, event)
         process_input_event(z, event)
     }
+    update_if_held(z)
     process_input(z)
 
     lvl := &z.level_data
@@ -170,6 +173,8 @@ change_level :: proc(z: ^Zitrus_Heart, next_level: Level_ID) -> bool {
         return false
     }
 
+    fmt.printfln("INFO: Changing level. ID passed: %v", next_level)
+
     lvl.levels[lvl.current_level].end(z)
     asset_manager_unload_textures(z)
     clear_ecs(z)
@@ -207,6 +212,8 @@ destroy_heart :: proc(z: ^Zitrus_Heart) {
     for _, &v in z.component_pools {
         v.destroy_set(&v)
     }
+
+    destroy_input(z)
 
     delete(z.component_bit)
     delete(z.component_pools)
