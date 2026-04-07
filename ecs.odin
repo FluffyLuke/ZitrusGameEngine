@@ -43,14 +43,7 @@ Zitrus_Heart :: struct {
     asset_manager: Asset_Manager,
     input_data: Input_Data,
 
-    camera: struct {
-        position: Vec3,
-        direction: Vec3,
-        cameraRight: Vec3,
-        cameraUp: Vec3,
-
-        fov: f32
-    },
+    camera: Zitrus_Camera,
 
     level_data: struct {
         should_quit: bool,
@@ -89,7 +82,7 @@ init_heart :: proc(z: ^Zitrus_Heart, levels: []Level, action_map: map[int]Input_
         os.exit(-1)
     }
 
-    position: Vec3 = {0, 0, 3.0}
+    position: Vec3 = {0, 0, 1}
     target: Vec3 = {0, 0, 0}
     direction: Vec3 = (target - position)
     right: Vec3 = la.normalize(la.cross(Vec3 {0, 1, 0}, direction))
@@ -129,10 +122,8 @@ update_heart :: proc(z: ^Zitrus_Heart) -> bool {
             z.level_data.should_quit = true
         }
         update_input_event(z, event)
-        process_input_event(z, event)
     }
     update_if_held(z)
-    process_input(z)
 
     lvl := &z.level_data
     lvl.levels[lvl.current_level].update(z)
@@ -147,18 +138,6 @@ update_heart :: proc(z: ^Zitrus_Heart) -> bool {
     }
 
     return z.level_data.should_quit
-}
-
-process_input_event :: proc(z: ^Zitrus_Heart, event: sdl.Event) {
-    if event.type == .KEY_DOWN {
-        if event.key.key == sdl.K_W {
-            change_level(z, 1)
-        }
-    }
-}
-
-process_input :: proc(z: ^Zitrus_Heart) {
-    
 }
 
 // This function also clears current image assets (deallocates them)
@@ -227,6 +206,7 @@ destroy_heart :: proc(z: ^Zitrus_Heart) {
 
 Entity_Heart :: struct {
     position: Vec3,
+    scale: Vec3,
     rotation: quaternion128,
 }
 
@@ -238,7 +218,7 @@ create_entity :: proc(z: ^Zitrus_Heart) -> (index: Entity_ID) {
     z.next_id += 1;
     z.entity_masks.set(&z.entity_masks, index, &Component_Mask {0})
 
-    set_component(z, index, Entity_Heart{})
+    set_component(z, index, Entity_Heart{scale = {1,1,1}})
     set_component(z, index, Entity_Alive{})
     return
 }

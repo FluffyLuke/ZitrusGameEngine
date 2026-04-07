@@ -15,6 +15,12 @@ VAO :: u32
 Program_Id :: u32
 Shader_Id :: u32
 
+WINDOW_WIDTH :: 640
+WINDOW_HEIGHT :: 480
+
+MIN_DEPTH :: -100
+MAX_DEPTH ::  100
+
 BASIC_VERTEX_SHADER_PATH :: "vertex.glsl"
 BASIC_FRAGMENT_SHADER_PATH :: "fragment.glsl"
 
@@ -52,7 +58,7 @@ init_sdl :: proc(r: ^Renderer) -> bool {
         return false
     }
 
-    r.window = sdl.CreateWindow("Game", 640, 480, {.OPENGL})
+    r.window = sdl.CreateWindow("Game", WINDOW_WIDTH, WINDOW_HEIGHT, {.OPENGL})
     if r.window == nil {
         fmt.println("ERROR: Cannot init window: ", sdl.GetError())
         sdl.Quit();
@@ -151,19 +157,28 @@ render :: proc(z: ^Zitrus_Heart) {
         m_c, _ := get_component(z, e, Mesh)
         h_c, _ := get_component(z, e, Entity_Heart)
 
+        texture := m_c.texture
+
         // Model matrix
         // Set scale, rotation and position
         model_matrix := Identity_Matrix
         model_matrix = model_matrix * la.matrix4_translate(h_c.position)
-        // model_matrix = model_matrix * la.matrix4_rotate(f32(total_time) * la.to_radians(f32(50.0)), Vec3 {0.5, 1, 0})
+        model_matrix = model_matrix * la.matrix4_translate(Vec3 {f32(WINDOW_WIDTH)/2, f32(WINDOW_HEIGHT)/2, 0})
+        model_matrix = model_matrix * la.matrix4_scale(Vec3 {texture.dimensions.x, texture.dimensions.y, 1})
+        model_matrix = model_matrix * la.matrix4_scale(h_c.scale)
+        model_matrix = model_matrix * la.matrix4_scale(m_c.scale)
+        model_matrix = z.camera.fov * model_matrix
         
         // View matrix
         view_matrix := Identity_Matrix
         view_matrix = camera_view
 
         // projection matrix
+        aspect := f32(WINDOW_WIDTH) / f32(WINDOW_HEIGHT)
+
         projection_matrix := Identity_Matrix
-        projection_matrix = projection_matrix * la.matrix4_perspective(f32(la.to_radians(z.camera.fov)), 800.0 / 600.0, 0.1, 100.0)
+        projection_matrix = projection_matrix * la.matrix_ortho3d(0.0, f32(WINDOW_WIDTH), 0.0, f32(WINDOW_HEIGHT), MIN_DEPTH, MAX_DEPTH)
+        // projection_matrix = projection_matrix * la.matrix4_perspective(f32(la.to_radians(z.camera.fov)), aspect, 0.1, 100.0)
 
         // vieport transform in shader
         model_loc := gl.GetUniformLocation(r.basic_material, "model")
@@ -177,8 +192,8 @@ render :: proc(z: ^Zitrus_Heart) {
         gl.ActiveTexture(gl.TEXTURE0)
         gl.BindTexture(gl.TEXTURE_2D, m_c.texture.texture_id);
         gl.BindVertexArray(m_c.vao)
-        // gl.DrawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, nil)
-        gl.DrawArrays(gl.TRIANGLES, 0, 36)
+        gl.DrawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, nil)
+        //gl.DrawArrays(gl.TRIANGLES, 0, 36)
     }
     destroy_view(&view)
 

@@ -96,6 +96,8 @@ load_texture :: proc(z: ^Zitrus_Heart, relative_path: string) -> (Image_Resource
         return "", false
     }
 
+    asset.dimensions = {auto_cast texture.width, auto_cast texture.height}
+
     gl.GenTextures(1, &asset.texture_id)
     gl.BindTexture(gl.TEXTURE_2D, asset.texture_id)
 

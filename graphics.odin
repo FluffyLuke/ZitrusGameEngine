@@ -41,29 +41,36 @@ Image_Asset :: struct {
 
 Mesh :: struct {
     texture: Image_Asset,
-    verticies: []f32,
+    vertices: []f32,
     indices: []u32,
+
+    scale: Vec3,
 
     vao: VAO,
     ebo: EBO,
     vbo: VBO
 }
 
-create_mesh :: proc(
-    z: ^Zitrus_Heart,
-    verticies: []f32, 
-    indices: []u32, 
-    texture_id: Image_Resource_ID = ""
+create_texture_mesh :: proc(
+    z: ^Zitrus_Heart, 
+    texture_id: Image_Resource_ID,
+    scale: Vec3 = {1,1,1}
 ) -> (mesh: Mesh, okay: bool = true) {
     // === Setup geometry ===
     gl.GenVertexArrays(1, &mesh.vao)
     gl.BindVertexArray(mesh.vao)
 
-    mesh.verticies = make([]f32, len(verticies))
-    mesh.indices = make([]u32, len(indices))
-
-    copy(mesh.verticies, verticies)
-    copy(mesh.indices, indices)
+    mesh.vertices = []f32 {
+         0.5,  0.5, 0, 1.0, 0.0,
+         0.5, -0.5, 0, 1.0, 1.0,
+        -0.5, -0.5, 0, 0.0, 1.0,
+        -0.5,  0.5, 0, 0.0, 0.0
+    }
+    mesh.indices = []u32 {
+        0, 1, 3,
+        1, 2, 3
+    }
+    mesh.scale = scale
 
     gl.GenBuffers(1, &mesh.ebo)
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.ebo)
@@ -71,7 +78,7 @@ create_mesh :: proc(
 
     gl.GenBuffers(1, &mesh.vbo)
     gl.BindBuffer(gl.ARRAY_BUFFER, mesh.vbo)
-    gl.BufferData(gl.ARRAY_BUFFER, len(verticies) * size_of(f32), raw_data(verticies), gl.STATIC_DRAW)
+    gl.BufferData(gl.ARRAY_BUFFER, len(mesh.vertices) * size_of(f32), raw_data(mesh.vertices), gl.STATIC_DRAW)
 
     gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 5 * size_of(f32), uintptr(0))
     gl.EnableVertexAttribArray(0)
@@ -98,6 +105,7 @@ create_mesh :: proc(
         return
     }
 
+
     mesh.texture = image_asset
 
     return
@@ -108,6 +116,6 @@ delete_mesh :: proc(mesh: ^Mesh) {
     gl.DeleteBuffers(1, &mesh.ebo)
     gl.DeleteBuffers(1, &mesh.vbo)
 
-    delete(mesh.indices)
-    delete(mesh.verticies)
+    // delete(mesh.indices)
+    // delete(mesh.vertices)
 }

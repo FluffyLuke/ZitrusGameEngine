@@ -1,5 +1,6 @@
 package zitrus
 
+import "libs:zitrus"
 import "core:fmt"
 import "core:mem"
 
@@ -106,7 +107,7 @@ Input_Callback :: struct {
     callback: proc(^Zitrus_Heart, rawptr),
 }
 
-Input_Binding :: struct {
+Input_Action :: struct {
     key: Input_Key,
     is_held: bool,
     on_press: [dynamic]Input_Callback,
@@ -116,7 +117,7 @@ Input_Binding :: struct {
 Input_Data :: struct {
     // User must create an enum with list of actions
     // Each action (enum value) will be an index to this array
-    action_map: [dynamic]Input_Binding,
+    action_map: [dynamic]Input_Action,
     sdl_to_action_map: map[sdl.Keycode][dynamic]Action_ID,
 }
 
@@ -138,6 +139,10 @@ configurate_input :: proc(z: ^Zitrus_Heart, actions: map[Action_ID]Input_Key) {
         list := &input.sdl_to_action_map[sdl_key]
         append(list, id)
     }
+}
+
+get_action :: #force_inline proc(z: ^Zitrus_Heart, action_id: Action_ID) -> ^Input_Action {
+    return &z.input_data.action_map[action_id]
 }
 
 add_on_press_callback :: proc(z: ^Zitrus_Heart, action_id: Action_ID, callback_id: Callback_ID, data: rawptr, callback: proc(^Zitrus_Heart, rawptr)) {
