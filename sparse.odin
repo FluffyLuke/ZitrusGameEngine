@@ -4,7 +4,7 @@ import "core:fmt"
 Sparse_Index :: distinct u64
 Dense_Index :: distinct u64
 
-Component_Pointer :: rawptr
+Item_Pointer :: rawptr
 
 SPARSE_PAGE_SIZE :: 4096
 Sparse_Set :: struct {
@@ -14,8 +14,8 @@ Sparse_Set :: struct {
     
     destroy_set: proc(this: rawptr),
 
-    get: proc(this: rawptr, id: Sparse_Index) -> Component_Pointer,
-    set: proc(this: rawptr, id: Sparse_Index, item: Component_Pointer) -> Component_Pointer,
+    get: proc(this: rawptr, id: Sparse_Index) -> Item_Pointer,
+    set: proc(this: rawptr, id: Sparse_Index, item: Item_Pointer) -> Item_Pointer,
     delete: proc(this: rawptr, id: Sparse_Index) -> bool,
     clear: proc(this: rawptr),
 
@@ -35,7 +35,7 @@ new_sparse_set :: proc($T: typeid, allocator := context.allocator) -> (sparse_se
     sparse_set.type_in_set = T
 
     sparse_set.data = new(Sparse_Set_Data(T), allocator)
-    sparse_set.get = proc(this: rawptr, id: Sparse_Index) -> Component_Pointer {
+    sparse_set.get = proc(this: rawptr, id: Sparse_Index) -> Item_Pointer {
         sparse_set: ^Sparse_Set = (^Sparse_Set)(this)
         data: ^Sparse_Set_Data(T) = (^Sparse_Set_Data(T))(sparse_set.data)
         
@@ -48,7 +48,7 @@ new_sparse_set :: proc($T: typeid, allocator := context.allocator) -> (sparse_se
         return nil
     }
 
-    sparse_set.set = proc(this: rawptr, id: Sparse_Index, item: Component_Pointer) -> Component_Pointer{
+    sparse_set.set = proc(this: rawptr, id: Sparse_Index, item: Item_Pointer) -> Item_Pointer{
         sparse_set: ^Sparse_Set = (^Sparse_Set)(this)
         data: ^Sparse_Set_Data(T) = (^Sparse_Set_Data(T))(sparse_set.data)
 

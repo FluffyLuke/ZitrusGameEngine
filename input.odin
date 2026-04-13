@@ -104,7 +104,7 @@ INPUT_TO_SDL := [Input_Key]sdl.Keycode {
 Input_Callback :: struct {
     id: string,
     data: rawptr,
-    callback: proc(^Zitrus_Heart, rawptr),
+    callback: proc(rawptr),
 }
 
 Input_Action :: struct {
@@ -121,8 +121,10 @@ Input_Data :: struct {
     sdl_to_action_map: map[sdl.Keycode][dynamic]Action_ID,
 }
 
-configurate_input :: proc(z: ^Zitrus_Heart, actions: map[Action_ID]Input_Key) {
-    input := &z.input_data
+configurate_input :: proc(actions: map[Action_ID]Input_Key) {
+    h := get_heart()
+
+    input := &h.input_data
 
     resize(&input.action_map, len(actions))
     for id, key in actions {
@@ -141,28 +143,32 @@ configurate_input :: proc(z: ^Zitrus_Heart, actions: map[Action_ID]Input_Key) {
     }
 }
 
-get_action :: #force_inline proc(z: ^Zitrus_Heart, action_id: Action_ID) -> ^Input_Action {
-    return &z.input_data.action_map[action_id]
+get_action :: #force_inline proc(action_id: Action_ID) -> ^Input_Action {
+    h := get_heart()
+    return &h.input_data.action_map[action_id]
 }
 
-add_on_press_callback :: proc(z: ^Zitrus_Heart, action_id: Action_ID, callback_id: Callback_ID, data: rawptr, callback: proc(^Zitrus_Heart, rawptr)) {
-    input := &z.input_data
+add_on_press_callback :: proc(action_id: Action_ID, callback_id: Callback_ID, data: rawptr, callback: proc(rawptr)) {
+    h := get_heart()
+    input := &h.input_data
 
     current_action := &input.action_map[action_id]
 
     append(&current_action.on_press, Input_Callback {callback_id, data, callback})
 }
 
-add_on_release_callback :: proc(z: ^Zitrus_Heart, action_id: Action_ID, callback_id: Callback_ID, data: rawptr, callback: proc(^Zitrus_Heart, rawptr)) {
-    input := &z.input_data
+add_on_release_callback :: proc(action_id: Action_ID, callback_id: Callback_ID, data: rawptr, callback: proc(rawptr)) {
+    h := get_heart()
+    input := &h.input_data
 
     current_action := &input.action_map[action_id]
 
     append(&current_action.on_release, Input_Callback {callback_id, data, callback})
 }
 
-remove_on_press_callback :: proc(z: ^Zitrus_Heart, action_id: Action_ID, callback_id: Callback_ID) {
-    input := &z.input_data
+remove_on_press_callback :: proc(action_id: Action_ID, callback_id: Callback_ID) {
+    h := get_heart()
+    input := &h.input_data
 
     current_action := &input.action_map[action_id]
 
@@ -185,8 +191,9 @@ remove_on_press_callback :: proc(z: ^Zitrus_Heart, action_id: Action_ID, callbac
     } 
 }
 
-remove_on_release_callback :: proc(z: ^Zitrus_Heart, action_id: Action_ID, callback_id: Callback_ID) {
-    input := &z.input_data
+remove_on_release_callback :: proc(action_id: Action_ID, callback_id: Callback_ID) {
+    h := get_heart()
+    input := &h.input_data
 
     current_action := &input.action_map[action_id]
 
@@ -210,8 +217,9 @@ remove_on_release_callback :: proc(z: ^Zitrus_Heart, action_id: Action_ID, callb
 }
 
 @(private)
-update_if_held :: proc(z: ^Zitrus_Heart) {
-    input := &z.input_data
+update_if_held :: proc() {
+    h := get_heart()
+    input := &h.input_data
 
     state_ptr := sdl.GetKeyboardState(nil)
     for key_code, list in input.sdl_to_action_map {
@@ -225,8 +233,9 @@ update_if_held :: proc(z: ^Zitrus_Heart) {
 }
 
 @(private)
-update_input_event :: proc(z: ^Zitrus_Heart, event: sdl.Event) {
-    input := &z.input_data
+update_input_event :: proc(event: sdl.Event) {
+    h := get_heart()
+    input := &h.input_data
     if event.type == .KEY_DOWN {
         actions, ok := input.sdl_to_action_map[event.key.key]
         if !ok {
@@ -236,7 +245,7 @@ update_input_event :: proc(z: ^Zitrus_Heart, event: sdl.Event) {
         for action_id in actions {
             current_action := &input.action_map[action_id]
             for callback in current_action.on_press {
-                callback.callback(z, callback.data)
+                callback.callback(callback.data)
             }
         }
     }
@@ -250,15 +259,16 @@ update_input_event :: proc(z: ^Zitrus_Heart, event: sdl.Event) {
         for action_id in actions {
             current_action := &input.action_map[action_id]
             for callback in current_action.on_release {
-                callback.callback(z, callback.data)
+                callback.callback(callback.data)
             }
         }
     }
 }
 
 @(private)
-destroy_input :: proc(z: ^Zitrus_Heart) {
-    input := &z.input_data
+destroy_input :: proc() {
+    h := get_heart()
+    input := &h.input_data
 
     for action in input.action_map {
         for callback in action.on_press {

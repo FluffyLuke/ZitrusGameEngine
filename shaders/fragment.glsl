@@ -8,5 +8,13 @@ uniform sampler2D ourTexture;
 
 void main()
 {
-    FragColor = texture(ourTexture, TexCoord);
+    vec4 texColor = texture(ourTexture, TexCoord);
+    
+    // If the pixel is basically invisible, throw it away.
+    // Otherwise these pixels will overwrite what is behind them.
+    if(texColor.a < 0.05) {
+        discard;
+    }
+
+    FragColor = texColor;
 } 

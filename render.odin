@@ -12,11 +12,10 @@ VBO :: u32
 EBO :: u32
 VAO :: u32
 
-Program_Id :: u32
-Shader_Id :: u32
+Program_ID :: u32
+Shader_ID :: u32
 
-WINDOW_WIDTH :: 640
-WINDOW_HEIGHT :: 480
+PPU :: 64 // 64 pixels are 1 unit in game
 
 MIN_DEPTH :: -100
 MAX_DEPTH ::  100
@@ -30,12 +29,19 @@ Renderer :: struct {
     window: ^sdl.Window,
     ctx: sdl.GLContext,
 
+    window_size: Vec2Int,
+    background_color: Vec4,
+
     basic_material: u32,
 }
 
 @(private)
-init_renderer :: proc(r: ^Renderer, exe_path: String_Ref) -> bool {
+init_renderer :: proc( exe_path: String_Ref, window_size: Vec2Int) -> bool {
+    h := get_heart()
+    r := &h.renderer
+
     r.exe_path = exe_path
+    r.window_size = window_size
     
     init_sdl(r) or_return
 
@@ -47,7 +53,14 @@ init_renderer :: proc(r: ^Renderer, exe_path: String_Ref) -> bool {
     gl.DeleteShader(vertex_shader)
     gl.DeleteShader(fragment_shader)
 
+    // Enable depth
     gl.Enable(gl.DEPTH_TEST)
+
+    // Turn on blending (multiply pixels by textures alpha channel)
+    gl.Enable(gl.BLEND)
+    
+    // Set the standard alpha blending equation (multiply what's left by the backgrounds color)
+    gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 
     return true
 }
@@ -58,7 +71,7 @@ init_sdl :: proc(r: ^Renderer) -> bool {
         return false
     }
 
-    r.window = sdl.CreateWindow("Game", WINDOW_WIDTH, WINDOW_HEIGHT, {.OPENGL})
+    r.window = sdl.CreateWindow("Game", r.window_size.x, r.window_size.y, {.OPENGL})
     if r.window == nil {
         fmt.println("ERROR: Cannot init window: ", sdl.GetError())
         sdl.Quit();
@@ -81,7 +94,7 @@ init_sdl :: proc(r: ^Renderer) -> bool {
     return true
 }
 
-compile_shader :: proc(r: ^Renderer, shader_type: u32, shader_path: string) -> (Shader_Id, bool) {
+compile_shader :: proc(r: ^Renderer, shader_type: u32, shader_path: string) -> (Shader_ID, bool) {
     defer free_all(context.temp_allocator)
 
     path := str.concatenate({r.exe_path, SHADERS_ROOT, shader_path}, context.temp_allocator)
@@ -104,7 +117,7 @@ compile_shader :: proc(r: ^Renderer, shader_type: u32, shader_path: string) -> (
     return shader_id, true
 }
 
-link_to_program :: proc(r: ^Renderer, shaders: ..Shader_Id) -> (Program_Id, bool) {
+link_to_program :: proc(r: ^Renderer, shaders: ..Shader_ID) -> (Program_ID, bool) {
     shader_program: u32
     shader_program = gl.CreateProgram()
     
@@ -138,47 +151,100 @@ destroy_renderer :: proc(r: ^Renderer) {
     sdl.Quit()
 }
 
-render :: proc(z: ^Zitrus_Heart) {
-    r := &z.renderer
+set_background_color :: proc(color: Vec4) {
+    h := get_heart()
+    r := &h.renderer
+    r.background_color = color
+}
 
-    gl.ClearColor(0.2, 0.2, 0.3, 1)
+get_window_size :: proc() -> Vec2Int {
+    h := get_heart()
+    r := &h.renderer
+    return r.window_size
+}
+
+resize_window :: proc {
+    resize_window_xy,
+    resize_window_vec
+}
+
+resize_window_xy :: proc(x, y: i32) {
+    h := get_heart()
+    r := &h.renderer
+    r.window_size = {x, y}
+
+    if r.window != nil {
+        sdl.SetWindowSize(r.window, x, y)
+    }
+}
+
+resize_window_vec :: proc(size: Vec2Int) {
+    h := get_heart()
+    r := &h.renderer
+    r.window_size = size
+
+    if r.window != nil {
+        sdl.SetWindowSize(r.window, size.x, size.y)
+    }
+}
+
+render :: proc() {
+    h := get_heart()
+    r := &h.renderer
+
+    gl.ClearColor(r.background_color.x, r.background_color.y, r.background_color.z, r.background_color.w)
     gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
     gl.UseProgram(r.basic_material)
 
+    world_height: f32 = 10.0
+    aspect := f32(r.window_size.x) / f32(r.window_size.y)
+    world_width := world_height * aspect
+
+    half_w, half_h := world_width / 2, world_height / 2
+
     camera_view := la.matrix4_look_at(
-        z.camera.position, 
-        z.camera.position + z.camera.direction,
-        z.camera.cameraUp
+        h.camera.position, 
+        h.camera.position + h.camera.direction,
+        h.camera.cameraUp
     )
     
-    view := view(z, Mesh)
+    view := view(Mesh_2D)
     for e in view.entities {
-        m_c, _ := get_component(z, e, Mesh)
-        h_c, _ := get_component(z, e, Entity_Heart)
+        h_c := get_entity_heart(e)
+        m_c, _ := get_component(e, Mesh_2D)
 
         texture := m_c.texture
 
         // Model matrix
         // Set scale, rotation and position
         model_matrix := Identity_Matrix
-        model_matrix = model_matrix * la.matrix4_translate(h_c.position)
-        model_matrix = model_matrix * la.matrix4_translate(Vec3 {f32(WINDOW_WIDTH)/2, f32(WINDOW_HEIGHT)/2, 0})
-        model_matrix = model_matrix * la.matrix4_scale(Vec3 {texture.dimensions.x, texture.dimensions.y, 1})
-        model_matrix = model_matrix * la.matrix4_scale(h_c.scale)
-        model_matrix = model_matrix * la.matrix4_scale(m_c.scale)
-        model_matrix = z.camera.fov * model_matrix
+        model_matrix *= la.matrix4_translate(h_c.position)
+
+        model_matrix *= la.matrix4_from_quaternion(h_c.rotation)
+
+        world_tex_w := m_c.dimensions.x / PPU
+        world_tex_h := m_c.dimensions.y / PPU
+        model_matrix *= la.matrix4_scale(Vec3 {world_tex_w, world_tex_h, 1})
+
+        model_matrix *= la.matrix4_scale(h_c.scale)
+
+        model_matrix = h.camera.fov * model_matrix
         
         // View matrix
         view_matrix := Identity_Matrix
         view_matrix = camera_view
 
         // projection matrix
-        aspect := f32(WINDOW_WIDTH) / f32(WINDOW_HEIGHT)
-
         projection_matrix := Identity_Matrix
-        projection_matrix = projection_matrix * la.matrix_ortho3d(0.0, f32(WINDOW_WIDTH), 0.0, f32(WINDOW_HEIGHT), MIN_DEPTH, MAX_DEPTH)
-        // projection_matrix = projection_matrix * la.matrix4_perspective(f32(la.to_radians(z.camera.fov)), aspect, 0.1, 100.0)
+        projection_matrix *= la.matrix_ortho3d(
+            -half_w, half_w,
+            -half_h, half_h,
+            MIN_DEPTH, MAX_DEPTH
+        )
+
+        //aspect := f32(r.window_size.x) / f32(r.window_size.y)
+        // projection_matrix = projection_matrix * la.matrix4_perspective(f32(la.to_radians(h.camera.fov)), aspect, 0.1, 100.0)
 
         // vieport transform in shader
         model_loc := gl.GetUniformLocation(r.basic_material, "model")

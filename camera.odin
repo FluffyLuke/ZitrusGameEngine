@@ -10,8 +10,9 @@ Zitrus_Camera :: struct {
 }
 
 
-move_camera :: proc(z: ^Zitrus_Heart, move_by: Vec3) {
-    camera := &z.camera
+move_camera :: proc(move_by: Vec3) {
+    h := get_heart()
+    camera := &h.camera
 
     camera.position += move_by
 }
