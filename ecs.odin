@@ -69,7 +69,7 @@ Zitrus_Heart :: struct {
 }
 
 // This takes ownership of the "levels" slice. It should be allocated on heap
-init_heart :: proc(size: Vec2Int, levels: []Level, action_map: map[int]Input_Key) {
+init_heart :: proc(size: Vec2Int, levels: []Level, action_map: map[int]Input_Key, callback_groups_number: int) {
     heart.next_id = 0
     heart.next_bit_mask = 0
     heart.entity_masks = new_sparse_set(Component_Mask)
@@ -111,7 +111,7 @@ init_heart :: proc(size: Vec2Int, levels: []Level, action_map: map[int]Input_Key
     }
 
     init_asset_manager(heart.meta.exe_path)
-    configurate_input(action_map)
+    configurate_input(action_map, callback_groups_number)
 
     // TODO: Can cause potential problems in the future in the first frame of the game
     heart.meta.previous_frame = time.now()

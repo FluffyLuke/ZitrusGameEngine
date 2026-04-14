@@ -8,6 +8,8 @@ import sdl "vendor:sdl3"
 
 
 Action_ID :: int
+Callback_Group :: int
+
 Callback_ID :: string
 
 Input_Key :: enum {
@@ -102,9 +104,12 @@ INPUT_TO_SDL := [Input_Key]sdl.Keycode {
 }
 
 Input_Callback :: struct {
+    group: Callback_Group,
     id: string,
     data: rawptr,
     callback: proc(rawptr),
+
+    enabled: bool,
 }
 
 Input_Action :: struct {
@@ -114,14 +119,22 @@ Input_Action :: struct {
     on_release: [dynamic]Input_Callback,
 }
 
+Callback_Group_Pair :: struct{
+    action_id: Action_ID, 
+    callback_id: Callback_ID
+}
+
+
 Input_Data :: struct {
     // User must create an enum with list of actions
     // Each action (enum value) will be an index to this array
     action_map: [dynamic]Input_Action,
     sdl_to_action_map: map[sdl.Keycode][dynamic]Action_ID,
+
+    callback_groups: [dynamic][dynamic]Callback_Group_Pair,
 }
 
-configurate_input :: proc(actions: map[Action_ID]Input_Key) {
+configurate_input :: proc(actions: map[Action_ID]Input_Key, callback_groups_number: int) {
     h := get_heart()
 
     input := &h.input_data
@@ -141,6 +154,11 @@ configurate_input :: proc(actions: map[Action_ID]Input_Key) {
         list := &input.sdl_to_action_map[sdl_key]
         append(list, id)
     }
+
+    resize(&input.callback_groups, callback_groups_number)
+    for i in 0..<callback_groups_number {
+        input.callback_groups[i] = make([dynamic]Callback_Group_Pair)
+    }
 }
 
 get_action :: #force_inline proc(action_id: Action_ID) -> ^Input_Action {
@@ -148,22 +166,35 @@ get_action :: #force_inline proc(action_id: Action_ID) -> ^Input_Action {
     return &h.input_data.action_map[action_id]
 }
 
-add_on_press_callback :: proc(action_id: Action_ID, callback_id: Callback_ID, data: rawptr, callback: proc(rawptr)) {
+add_on_press_callback :: proc(action_id: Action_ID, callback_id: Callback_ID, group: Callback_Group, data: rawptr, callback: proc(rawptr)) {
     h := get_heart()
     input := &h.input_data
 
     current_action := &input.action_map[action_id]
 
-    append(&current_action.on_press, Input_Callback {callback_id, data, callback})
+    for c in current_action.on_press {
+        if c.id == callback_id {
+            fmt.printfln("WARNING: Cannot add callback '%v' - already exists", callback_id)
+            return
+        }
+    }
+
+    append(&current_action.on_press, Input_Callback {group, callback_id, data, callback, true})
+    append(&input.callback_groups[group], Callback_Group_Pair {action_id, callback_id})
 }
 
-add_on_release_callback :: proc(action_id: Action_ID, callback_id: Callback_ID, data: rawptr, callback: proc(rawptr)) {
+enable_on_press_callback :: proc(action_id: Action_ID, callback_id: Callback_ID, enable: bool) {
     h := get_heart()
     input := &h.input_data
 
     current_action := &input.action_map[action_id]
 
-    append(&current_action.on_release, Input_Callback {callback_id, data, callback})
+    for &callback, i in current_action.on_press {
+        if callback.id == callback_id {
+            callback.enabled = enable
+            break
+        }
+    }
 }
 
 remove_on_press_callback :: proc(action_id: Action_ID, callback_id: Callback_ID) {
@@ -172,23 +203,75 @@ remove_on_press_callback :: proc(action_id: Action_ID, callback_id: Callback_ID)
 
     current_action := &input.action_map[action_id]
 
-    ids_to_remove: [dynamic]int
-    reserve(&ids_to_remove, len(current_action.on_press))
-    defer delete(ids_to_remove)
-
+    index_to_remove: int = -1
+    
     for callback, i in current_action.on_press {
         if callback.id == callback_id {
-            append(&ids_to_remove, i)
+            index_to_remove = i
+            break
         }
     }
+
+    if index_to_remove == -1 {
+        fmt.printfln("WARNING: Cannot remove callback '%v' - does not exist", callback_id)
+        return
+    }
+
+    callback_ref := &current_action.on_press[index_to_remove]
+    group_id := callback_ref.group
+    group := &input.callback_groups[callback_ref.group]
+
+    if callback_ref.data != nil {
+        free(callback_ref.data)
+    }
+    unordered_remove(&current_action.on_press, index_to_remove)
+
+    index_group_to_remove: int = -1
     
-    #reverse for index in ids_to_remove {
-        callback_ref := &current_action.on_press[index]
-        if callback_ref.data != nil {
-            free(callback_ref.data)
+    for callback, i in group {
+        if callback.callback_id == callback_id {
+            index_group_to_remove = i
+            break
         }
-        ordered_remove(&current_action.on_press, index)
-    } 
+    }
+
+    if index_group_to_remove == -1 {
+        fmt.printfln("WARNING: Cannot remove callback '%v' from group '%v' - not in group", callback_id, group_id)
+        return
+    }
+
+    unordered_remove(group, index_group_to_remove)
+}
+
+add_on_release_callback :: proc(action_id: Action_ID, callback_id: Callback_ID, group: Callback_Group, data: rawptr, callback: proc(rawptr)) {
+    h := get_heart()
+    input := &h.input_data
+
+    current_action := &input.action_map[action_id]
+
+    for c in current_action.on_release {
+        if c.id == callback_id {
+            fmt.printfln("WARNING: Cannot add callback '%v' - already exist", c.id)
+            return
+        }
+    }
+
+    append(&current_action.on_release, Input_Callback {group, callback_id, data, callback, true})
+    append(&input.callback_groups[group], Callback_Group_Pair {action_id, callback_id})
+}
+
+enable_on_release_callback  :: proc(action_id: Action_ID, callback_id: Callback_ID, enable: bool) {
+    h := get_heart()
+    input := &h.input_data
+
+    current_action := &input.action_map[action_id]
+
+    for &callback, i in current_action.on_release {
+        if callback.id == callback_id {
+            callback.enabled = enable
+            break
+        }
+    }
 }
 
 remove_on_release_callback :: proc(action_id: Action_ID, callback_id: Callback_ID) {
@@ -197,23 +280,63 @@ remove_on_release_callback :: proc(action_id: Action_ID, callback_id: Callback_I
 
     current_action := &input.action_map[action_id]
 
-    ids_to_remove: [dynamic]int
-    reserve(&ids_to_remove, len(current_action.on_release))
-    defer delete(ids_to_remove)
+    index_to_remove: int = -1
 
     for callback, i in current_action.on_release {
         if callback.id == callback_id {
-            append(&ids_to_remove, i)
+            index_to_remove = i
+            break
         }
     }
-    
-    #reverse for index in ids_to_remove {
-        callback_ref := &current_action.on_release[index]
-        if callback_ref.data != nil {
-            free(callback_ref.data)
+
+    if index_to_remove == -1 {
+        fmt.printfln("WARNING: Cannot remove callback '%v' - does not exist", callback_id)
+        return
+    }
+
+    callback_ref := &current_action.on_release[index_to_remove]
+    group_id := callback_ref.group
+    group := &input.callback_groups[callback_ref.group]
+
+    if callback_ref.data != nil {
+        free(callback_ref.data)
+    }
+    unordered_remove(&current_action.on_release, index_to_remove)
+
+    index_group_to_remove: int = -1
+
+    for callback, i in group {
+        if callback.callback_id == callback_id {
+            index_group_to_remove = i
+            break
         }
-        ordered_remove(&current_action.on_release, index)
-    } 
+    }
+
+    if index_group_to_remove == -1 {
+        fmt.printfln("WARNING: Cannot remove callback '%v' from group '%v' - not in group", callback_id, group_id)
+        return
+    }
+
+    unordered_remove(group, index_group_to_remove)
+}
+
+input_group_enable :: proc(group: Callback_Group, enable: bool) {
+    h := get_heart()
+    input := &h.input_data
+
+    for pair in input.callback_groups[group] {
+        current_action := &input.action_map[pair.action_id]
+        
+        for &c in current_action.on_press {
+            if c.group != group do continue
+            c.enabled = enable
+        }
+
+        for &c in current_action.on_release {
+            if c.group != group do continue
+            c.enabled = enable
+        }
+    }
 }
 
 @(private)
@@ -245,6 +368,7 @@ update_input_event :: proc(event: sdl.Event) {
         for action_id in actions {
             current_action := &input.action_map[action_id]
             for callback in current_action.on_press {
+                if !callback.enabled do continue
                 callback.callback(callback.data)
             }
         }
@@ -259,6 +383,7 @@ update_input_event :: proc(event: sdl.Event) {
         for action_id in actions {
             current_action := &input.action_map[action_id]
             for callback in current_action.on_release {
+                if !callback.enabled do continue
                 callback.callback(callback.data)
             }
         }
@@ -289,4 +414,9 @@ destroy_input :: proc() {
         delete(list)
     }
     delete_map(input.sdl_to_action_map)
+
+    for g in input.callback_groups {
+        delete(g)
+    }
+    delete(input.callback_groups)
 }
