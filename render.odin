@@ -208,9 +208,9 @@ render :: proc() {
         h.camera.position + h.camera.direction,
         h.camera.cameraUp
     )
-    
     view := view(Mesh_2D)
     for e in view.entities {
+    
         h_c := get_entity_heart(e)
         m_c, _ := get_component(e, Mesh_2D)
 
@@ -228,18 +228,15 @@ render :: proc() {
         model_matrix *= la.matrix4_scale(Vec3 {world_tex_w, world_tex_h, 1})
 
         model_matrix *= la.matrix4_scale(h_c.scale)
-
-        model_matrix = h.camera.fov * model_matrix
         
         // View matrix
-        view_matrix := Identity_Matrix
-        view_matrix = camera_view
+        view_matrix := camera_view
 
         // projection matrix
         projection_matrix := Identity_Matrix
         projection_matrix *= la.matrix_ortho3d(
-            -half_w, half_w,
-            -half_h, half_h,
+            -half_w / h.camera.close_up, half_w / h.camera.close_up,
+            -half_h / h.camera.close_up, half_h / h.camera.close_up,
             MIN_DEPTH, MAX_DEPTH
         )
 

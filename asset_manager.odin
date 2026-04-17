@@ -47,30 +47,33 @@ load_texture :: proc(relative_path: string, persist: bool = false) -> (Image_Res
     fmt.printfln("INFO: Loading texture '%v'", relative_path)
     
     path := str.concatenate({am.exe_path, ASSET_ROOT, relative_path}, context.temp_allocator)
-    path_meta := str.concatenate({path, ".meta"}, context.temp_allocator)
+    // path_meta := str.concatenate({path, ".meta"}, context.temp_allocator)
 
-    metadata, ok_file := os.read_entire_file_from_path(path_meta, context.temp_allocator)
-    if ok_file != os.ERROR_NONE {
-        fmt.printfln("ERROR: cannot FIND meta file for '%s': %s ...", relative_path, ok_file)
-        fmt.printfln("ERROR: ... absolute path to meta file: '%s'", path_meta)
-        return "", false
-    }
+    // metadata, ok_file := os.read_entire_file_from_path(path_meta, context.temp_allocator)
+    // if ok_file != os.ERROR_NONE {
+    //     fmt.printfln("ERROR: cannot FIND meta file for '%s': %s ...", relative_path, ok_file)
+    //     fmt.printfln("ERROR: ... absolute path to meta file: '%s'", path_meta)
+    //     return "", false
+    // }
 
-    json_val, ok_parse := json.parse(metadata, allocator = context.temp_allocator)
-    if ok_parse != .None {
-        fmt.printfln("ERROR: cannot FORMAT meta file for '%s': %s", relative_path, ok_parse)
-        return "", false
-    }
+    // json_val, ok_parse := json.parse(metadata, allocator = context.temp_allocator)
+    // if ok_parse != .None {
+    //     fmt.printfln("ERROR: cannot FORMAT meta file for '%s': %s", relative_path, ok_parse)
+    //     return "", false
+    // }
 
-    root := json_val.(json.Object)
-    data_content, data_err := root["data"]
+    // root := json_val.(json.Object)
+    // data_content, data_err := root["data"]
 
-    if data_err {
-        fmt.printfln("ERROR: cannot FORMAT meta file for '%s': %s", relative_path, "'data' object is incorrect or missing")
-    }
+    // if data_err {
+    //     fmt.printfln("ERROR: cannot FORMAT meta file for '%s': %s", relative_path, "'data' object is incorrect or missing")
+    // }
 
     asset: Image_Asset
-    asset_id := Image_Resource_ID(root["id"].(json.String))
+
+    // TODO: Bring back meta files in the future
+    asset_id := Image_Resource_ID(str.clone(relative_path))
+    // asset_id := Image_Resource_ID(root["id"].(json.String))
     _, asset_found := am.image_assets[asset_id]
     _, asset_found_persist := am.image_assets_pesist[asset_id]
 
@@ -79,33 +82,43 @@ load_texture :: proc(relative_path: string, persist: bool = false) -> (Image_Res
         return "", false
     }
 
-    switch root["type"].(json.String) {
-        case "single": {
-            asset_meta: Image_Asset_Metadata_Single
-            error := json.unmarshal(metadata, &asset_meta, allocator = context.temp_allocator)
-            if error != nil {
-                fmt.printfln("ERROR: cannot FORMAT file for '%s': %s", relative_path, error)
-                return "", false
-            }
-            asset.id = Image_Resource_ID(str.clone(asset_meta.id))
+    // asset_meta: Image_Asset_Metadata_Single
+    // error := json.unmarshal(metadata, &asset_meta, allocator = context.temp_allocator)
+    // if error != nil {
+    //     fmt.printfln("ERROR: cannot FORMAT file for '%s': %s", relative_path, error)
+    //     return "", false
+    // }
+    //asset.id = Image_Resource_ID(str.clone(asset_meta.id))
 
-            asset.type = Image_Single {
-                shot = asset_meta.shot
-            }
-        }
-        case "multiple": {
-            asset_meta: Image_Asset_Metadata_Multiple
-            error := json.unmarshal(metadata, &asset_meta, allocator = context.temp_allocator)
-            if error != nil {
-                fmt.printfln("ERROR: cannot FORMAT meta file for '%s': %s", relative_path, error)
-                return "", false
-            }
-            asset.id = Image_Resource_ID(str.clone(asset_meta.id))
-            asset.type = Image_Multiple {
-                shots = asset_meta.shots
-            }
-        }
-    }
+    asset.id = asset_id
+
+    // switch root["type"].(json.String) {
+    //     case "single": {
+    //         asset_meta: Image_Asset_Metadata_Single
+    //         error := json.unmarshal(metadata, &asset_meta, allocator = context.temp_allocator)
+    //         if error != nil {
+    //             fmt.printfln("ERROR: cannot FORMAT file for '%s': %s", relative_path, error)
+    //             return "", false
+    //         }
+    //         asset.id = Image_Resource_ID(str.clone(asset_meta.id))
+
+    //         asset.type = Image_Single {
+    //             shot = asset_meta.shot
+    //         }
+    //     }
+    //     case "multiple": {
+    //         asset_meta: Image_Asset_Metadata_Multiple
+    //         error := json.unmarshal(metadata, &asset_meta, allocator = context.temp_allocator)
+    //         if error != nil {
+    //             fmt.printfln("ERROR: cannot FORMAT meta file for '%s': %s", relative_path, error)
+    //             return "", false
+    //         }
+    //         asset.id = Image_Resource_ID(str.clone(asset_meta.id))
+    //         asset.type = Image_Multiple {
+    //             shots = asset_meta.shots
+    //         }
+    //     }
+    // }
 
     // Load proper image
     texture, err := img.load_from_file(path, {})

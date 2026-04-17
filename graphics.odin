@@ -33,10 +33,11 @@ Image_Asset :: struct {
     id: Image_Resource_ID,
     dimensions: Vec2,
     texture_id: Texture_GL_Id,
-    type: union {
-        Image_Single,
-        Image_Multiple
-    }
+    using single: Image_Single,
+    // type: union {
+    //     Image_Single,
+    //     Image_Multiple
+    // }
 }
 
 Mesh_ID :: distinct u64
@@ -46,8 +47,6 @@ next_mesh_id: Mesh_ID = 0
 Mesh_2D :: struct {
     id: Mesh_ID,
     texture: Image_Asset,
-    vertices: []f32,
-    indices: []u32,
 
     dimensions: Vec2,
 
@@ -67,105 +66,32 @@ destroy_graphics :: proc() {
 }
 
 create_texture_mesh :: proc {
-    create_texture_mesh_default,
-    create_texture_mesh_custom,
+    create_texture_mesh_short,
+    create_texture_mesh_size,
+    create_texture_mesh_size_and_src,
+    create_texture_mesh_full,
 }
 
-create_texture_mesh_default :: proc(
-    texture_id: Image_Resource_ID,
-) -> (mesh: Mesh_2D, okay: bool = true) {
-    // === Setup geometry ===
-    gl.GenVertexArrays(1, &mesh.vao)
-    gl.BindVertexArray(mesh.vao)
-
-    mesh.vertices = []f32 {
-         0.5,  0.5, 0, 1.0, 0.0,
-         0.5, -0.5, 0, 1.0, 1.0,
-        -0.5, -0.5, 0, 0.0, 1.0,
-        -0.5,  0.5, 0, 0.0, 0.0
-    }
-    mesh.indices = []u32 {
-        0, 1, 3,
-        1, 2, 3
-    }
-
-    gl.GenBuffers(1, &mesh.ebo)
-    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.ebo)
-    gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(mesh.indices) * size_of(u32), raw_data(mesh.indices), gl.STATIC_DRAW)
-
-    gl.GenBuffers(1, &mesh.vbo)
-    gl.BindBuffer(gl.ARRAY_BUFFER, mesh.vbo)
-    gl.BufferData(gl.ARRAY_BUFFER, len(mesh.vertices) * size_of(f32), raw_data(mesh.vertices), gl.STATIC_DRAW)
-
-    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 5 * size_of(f32), uintptr(0))
-    gl.EnableVertexAttribArray(0)
-
-    gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 5 * size_of(f32), uintptr(3 * size_of(f32)))
-    gl.EnableVertexAttribArray(1);
-
-    // Unbind all of the stuff
-    gl.BindVertexArray(0)
-    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, 0)
-    gl.BindBuffer(gl.ARRAY_BUFFER, 0)
-
-    // === Setup texture ===
-    if texture_id == "" {
-        okay = false
-        return
-    }
-
-    image_asset, ok := get_texture(texture_id)
-
-    if !ok {
-        fmt.println("ERROR: cannot create mesh")
-        okay = false
-        return
-    }
-
-    mesh.dimensions = image_asset.dimensions
-    mesh.texture = image_asset
-
-    return
+create_texture_mesh_short :: #force_inline proc(texture_id: Image_Resource_ID) -> (mesh: Mesh_2D, okay: bool = true) {
+    return create_texture_mesh_full(texture_id, {}, {}, true, true)
 }
 
-create_texture_mesh_custom :: proc(
+create_texture_mesh_size :: #force_inline proc(texture_id: Image_Resource_ID, size: Vec2) -> (mesh: Mesh_2D, okay: bool = true) {
+    return create_texture_mesh_full(texture_id, size, {}, false, true)
+}
+
+create_texture_mesh_size_and_src :: #force_inline proc(texture_id: Image_Resource_ID, size: Vec2, src: Rectangle) -> (mesh: Mesh_2D, okay: bool = true) {
+    return create_texture_mesh_full(texture_id, size, src, false, false)
+}
+
+create_texture_mesh_full :: proc(
     texture_id: Image_Resource_ID,
     size: Vec2,
+    src: Rectangle,
+
+    default_size: bool,
+    default_src: bool,
 ) -> (mesh: Mesh_2D, okay: bool = true) {
-    // === Setup geometry ===
-    gl.GenVertexArrays(1, &mesh.vao)
-    gl.BindVertexArray(mesh.vao)
-
-    mesh.vertices = []f32 {
-         0.5,  0.5, 0, 1.0, 0.0,
-         0.5, -0.5, 0, 1.0, 1.0,
-        -0.5, -0.5, 0, 0.0, 1.0,
-        -0.5,  0.5, 0, 0.0, 0.0
-    }
-    mesh.indices = []u32 {
-        0, 1, 3,
-        1, 2, 3
-    }
-
-    gl.GenBuffers(1, &mesh.ebo)
-    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.ebo)
-    gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(mesh.indices) * size_of(u32), raw_data(mesh.indices), gl.STATIC_DRAW)
-
-    gl.GenBuffers(1, &mesh.vbo)
-    gl.BindBuffer(gl.ARRAY_BUFFER, mesh.vbo)
-    gl.BufferData(gl.ARRAY_BUFFER, len(mesh.vertices) * size_of(f32), raw_data(mesh.vertices), gl.STATIC_DRAW)
-
-    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 5 * size_of(f32), uintptr(0))
-    gl.EnableVertexAttribArray(0)
-
-    gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 5 * size_of(f32), uintptr(3 * size_of(f32)))
-    gl.EnableVertexAttribArray(1);
-
-    // Unbind all of the stuff
-    gl.BindVertexArray(0)
-    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, 0)
-    gl.BindBuffer(gl.ARRAY_BUFFER, 0)
-
     // === Setup texture ===
     if texture_id == "" {
         okay = false
@@ -179,6 +105,59 @@ create_texture_mesh_custom :: proc(
         okay = false
         return
     }
+
+    // === Setup geometry ===
+    gl.GenVertexArrays(1, &mesh.vao)
+    gl.BindVertexArray(mesh.vao)
+
+    vertices: [20]f32
+
+    if default_src {
+        vertices = [20]f32 {
+            0.5,  0.5, 0, 1.0, 0.0,
+            0.5, -0.5, 0, 1.0, 1.0,
+           -0.5, -0.5, 0, 0.0, 1.0,
+           -0.5,  0.5, 0, 0.0, 0.0
+        }
+    } else {
+        dim := image_asset.dimensions
+
+        t_x_min := src.x / dim.x
+        t_x_max := (src.x + src.width) / dim.x
+        t_y_min := src.y / dim.y
+        t_y_max := (src.y + src.height) / dim.y
+
+        vertices = [20]f32 {
+            0.5,  0.5, 0, t_x_max, t_y_min,
+            0.5, -0.5, 0, t_x_max, t_y_max,
+           -0.5, -0.5, 0, t_x_min, t_y_max,
+           -0.5,  0.5, 0, t_x_min, t_y_min
+        }
+    }
+
+    indices := [6]u32 {
+        0, 1, 3,
+        1, 2, 3
+    }
+
+    gl.GenBuffers(1, &mesh.ebo)
+    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.ebo)
+    gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(indices) * size_of(u32), raw_data(&indices), gl.STATIC_DRAW)
+
+    gl.GenBuffers(1, &mesh.vbo)
+    gl.BindBuffer(gl.ARRAY_BUFFER, mesh.vbo)
+    gl.BufferData(gl.ARRAY_BUFFER, len(vertices) * size_of(f32), raw_data(&vertices), gl.STATIC_DRAW)
+
+    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 5 * size_of(f32), uintptr(0))
+    gl.EnableVertexAttribArray(0)
+
+    gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 5 * size_of(f32), uintptr(3 * size_of(f32)))
+    gl.EnableVertexAttribArray(1);
+
+    // Unbind all of the stuff
+    gl.BindVertexArray(0)
+    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, 0)
+    gl.BindBuffer(gl.ARRAY_BUFFER, 0)
 
     if !ok {
         fmt.printfln("ERROR: cannot find texure in asset manager of id: %s", texture_id)
@@ -186,7 +165,7 @@ create_texture_mesh_custom :: proc(
         return
     }
 
-    mesh.dimensions = size
+    mesh.dimensions = default_size ? image_asset.dimensions : size
     mesh.texture = image_asset
 
     return

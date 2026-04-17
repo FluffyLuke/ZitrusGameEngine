@@ -174,7 +174,7 @@ add_on_press_callback :: proc(action_id: Action_ID, callback_id: Callback_ID, gr
 
     for c in current_action.on_press {
         if c.id == callback_id {
-            fmt.printfln("WARNING: Cannot add callback '%v' - already exists", callback_id)
+            fmt.printfln("WARNING: Cannot add callback '%v' - already exist", callback_id)
             return
         }
     }

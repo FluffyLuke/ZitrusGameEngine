@@ -56,6 +56,8 @@ Zitrus_Heart :: struct {
         levels: []Level,
     },
 
+    cache: map[typeid]rawptr,
+
     next_id: Entity_ID,
     free_entities: [dynamic]Entity_ID,
     component_pools: map[typeid]Sparse_Set,
@@ -107,22 +109,28 @@ init_heart :: proc(size: Vec2Int, levels: []Level, action_map: map[int]Input_Key
         direction = direction,
         cameraRight = right,
         cameraUp = up,
-        fov = 45.0,
+        close_up = 1
     }
 
     init_asset_manager(heart.meta.exe_path)
     configurate_input(action_map, callback_groups_number)
+
+    heart.cache = make(map[typeid]rawptr)
 
     // TODO: Can cause potential problems in the future in the first frame of the game
     heart.meta.previous_frame = time.now()
 
     // Init first level
     heart.level_data.levels = levels
-    heart.level_data.levels[0].start()
 }
 
 get_heart :: #force_inline proc() -> ^Zitrus_Heart {
     return &heart
+}
+
+start_game_loop :: proc() {
+    heart.level_data.levels[0].start()
+    for !update_heart() {}
 }
 
 update_heart :: proc() -> bool {
@@ -200,7 +208,28 @@ destroy_heart :: proc() {
     delete(heart.meta.exe_path)
     delete(heart.level_data.levels)
 
+    for k, v in heart.cache {
+        free(v)
+    }
+    delete_map(heart.cache)
+
     destroy_renderer(&heart.renderer)
+}
+
+cache_add :: proc(item: $T) {
+    heart.cache[T] = new_clone(item)
+}
+
+cache_get :: proc($T: typeid) -> (^T, bool) {
+    item_raw, ok := heart.cache[T]
+    return (^T)(item_raw), ok
+}
+
+cache_remove :: proc(item: $T) -> bool {
+    item, ok := heart.cache[T]
+    if !ok do return false
+    free(item)
+    delete_key(&heart.cache, T)
 }
 
 // This function also clears current image assets (deallocates them)
@@ -399,8 +428,10 @@ View :: struct {
 view :: proc(component_types: ..typeid) -> (view: View) {
     target_mask := Component_Mask {}
     for t in component_types {
-        target_mask += {heart.component_to_bit[t]}
+        mask, ok := heart.component_to_bit[t]
+        if ok do target_mask += {mask}
     }
+    if target_mask == {} do return
     
     matches := [dynamic]Entity_ID_Sparse_Set {}
     defer delete(matches)

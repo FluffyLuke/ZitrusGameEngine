@@ -6,7 +6,7 @@ Zitrus_Camera :: struct {
     cameraRight: Vec3,
     cameraUp: Vec3,
 
-    fov: f32
+    close_up: f32
 }
 
 
