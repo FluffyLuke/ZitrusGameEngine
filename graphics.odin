@@ -40,6 +40,13 @@ Image_Asset :: struct {
     // }
 }
 
+Mesh_Flip :: enum {
+    None,
+    X,
+    Y,
+    XY,
+}
+
 Mesh_ID :: distinct u64
 @(private="file")
 next_mesh_id: Mesh_ID = 0
@@ -49,6 +56,7 @@ Mesh_2D :: struct {
     texture: Image_Asset,
 
     dimensions: Vec2,
+    flip: Mesh_Flip,
 
     vao: VAO,
     ebo: EBO,
@@ -158,12 +166,6 @@ create_texture_mesh_full :: proc(
     gl.BindVertexArray(0)
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, 0)
     gl.BindBuffer(gl.ARRAY_BUFFER, 0)
-
-    if !ok {
-        fmt.printfln("ERROR: cannot find texure in asset manager of id: %s", texture_id)
-        okay = false
-        return
-    }
 
     mesh.dimensions = default_size ? image_asset.dimensions : size
     mesh.texture = image_asset

@@ -220,14 +220,19 @@ render :: proc() {
         // Set scale, rotation and position
         model_matrix := Identity_Matrix
         model_matrix *= la.matrix4_translate(h_c.position)
-
         model_matrix *= la.matrix4_from_quaternion(h_c.rotation)
 
         world_tex_w := m_c.dimensions.x / PPU
         world_tex_h := m_c.dimensions.y / PPU
         model_matrix *= la.matrix4_scale(Vec3 {world_tex_w, world_tex_h, 1})
-
         model_matrix *= la.matrix4_scale(h_c.scale)
+
+        switch (m_c.flip) {
+            case .None:
+            case .X: model_matrix *= la.matrix4_scale(Vec3{-1,1,1})
+            case .Y: model_matrix *= la.matrix4_scale(Vec3{1,-1,1})
+            case .XY: model_matrix *= la.matrix4_scale(Vec3{-1,-1,1})
+        }
         
         // View matrix
         view_matrix := camera_view

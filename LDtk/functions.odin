@@ -4,30 +4,38 @@ import "core:fmt"
 
 import z "../"
 
-create_level_mesh :: proc(ldtk: ^LDtk_Data, id: string) {
-    level: ^Level
-    for &l in ldtk.levels {
-        if l.id != id do continue
-        level = &l
+Area_Index :: int
+Bad_Area_Index :: -1
+get_area_index :: proc(ldtk: ^LDtk_Data, name: string) -> Area_Index {
+    for &a, i in ldtk.areas {
+        if a.name != name do continue
+        return i
     }
+    return Bad_Area_Index
+}
 
-    if level == nil {
-        fmt.printfln("ERROR: cannot create level mesh: Level ID '%v' not found", id)
+create_area_mesh :: proc(ldtk: ^LDtk_Data, index: Area_Index) {
+
+    if index > len(ldtk.areas) - 1 || index < 0 {
+        fmt.printfln("ERROR: cannot create area mesh: bad index")
         return
     }
 
-    for grid in level.int_grids {
+    area := &ldtk.areas[index]
+    area_name := area.name
+
+    for grid in area.int_grids {
         for tile in grid.auto_tiles {
             image_id := z.Image_Resource_ID(grid.tileset_asset_path)
             mesh, ok := z.create_texture_mesh_size_and_src(image_id, {tile.pos.width, tile.pos.height}, tile.src)
             
             if !ok {
-                fmt.printfln("ERROR: Cannot create tile from level '%v'!", id)
+                fmt.printfln("ERROR: Cannot create tile from area '%v'!", area_name)
                 z.delete_mesh(&mesh)
                 continue
             }
 
-            tile_id := z.create_entity(proc(id: z.Sparse_Index) {
+            tile_id := z.create_entity(on_delete = proc(id: z.Sparse_Index) {
                 mesh, _ := z.get_component(id, z.Mesh_2D)
                 z.delete_mesh(mesh)
             })
@@ -46,5 +54,5 @@ create_level_mesh :: proc(ldtk: ^LDtk_Data, id: string) {
             z.set_position(tile_id, {tile.pos.x, tile.pos.y,0})
         }
     }
-    fmt.printfln("INFO: Created mesh for level '%v'", id)
+    fmt.printfln("INFO: Created mesh for area '%v'", area_name)
 }

@@ -15,36 +15,29 @@ Layer_IntGrid :: struct {
     auto_tiles: []Tile,
 }
 
-Level :: struct {
-    id: string,
+Area :: struct {
+    name: string,
     int_grids: []Layer_IntGrid,
 }
 
 LDtk_Data :: struct {
-    levels: []Level,
-}
-
-Tile_Flip :: enum {
-    None,
-    X,
-    Y,
-    XY,
+    areas: []Area,
 }
 
 Tile :: struct {
     id: f32,
     pos: z.Rectangle,
     src: z.Rectangle,
-    flip: Tile_Flip,
+    flip: z.Mesh_Flip,
     alpha: f32,
 }
 
-load_level :: proc(relative_path: string) -> (LDtk_Data, bool) {
+load_world :: proc(relative_path: string) -> (LDtk_Data, bool) {
     path := str.concatenate({z.heart.meta.exe_path, z.ASSET_ROOT, relative_path}, context.temp_allocator)
     data_raw, ok_file := os.read_entire_file_from_path(path, context.temp_allocator)
     
     if ok_file != os.ERROR_NONE {
-        fmt.printfln("ERROR: Cannot load level '%v' ...", relative_path)
+        fmt.printfln("ERROR: Cannot load world '%v' ...", relative_path)
         fmt.printfln("ERROR: ... full path: '%v'", path)
         return {}, false
     }
@@ -65,15 +58,15 @@ load_level :: proc(relative_path: string) -> (LDtk_Data, bool) {
 parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
     ldtk: LDtk_Data
 
-    levels := root.(json.Object)["levels"].(json.Array)
+    areas_json := root.(json.Object)["levels"].(json.Array)
 
-    ldtk.levels = make([]Level, len(levels))
-    for level, i_level in levels {
-        level_obj := level.(json.Object)
-        current_level := &ldtk.levels[i_level]
+    ldtk.areas = make([]Area, len(areas_json))
+    for area, i_area in areas_json {
+        area_obj := area.(json.Object)
+        current_area := &ldtk.areas[i_area]
 
-        current_level.id = str.clone(level_obj["identifier"].(json.String))
-        layers := level_obj["layerInstances"].(json.Array)
+        current_area.name = str.clone(area_obj["identifier"].(json.String))
+        layers := area_obj["layerInstances"].(json.Array)
 
         int_grid_layers := make([dynamic]Layer_IntGrid, allocator = context.temp_allocator)
 
@@ -89,11 +82,11 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                 case "IntGrid": {
                     tiles_array := layer_obj["autoLayerTiles"].(json.Array)
                     
-                    level_dir := path.dir(relative_path)
-                    defer delete(level_dir)
+                    world_dir := path.dir(relative_path)
+                    defer delete(world_dir)
 
                     layer_data := Layer_IntGrid {
-                        tileset_asset_path = str.concatenate({level_dir, "/", layer_obj["__tilesetRelPath"].(json.String)}),
+                        tileset_asset_path = str.concatenate({world_dir, "/", layer_obj["__tilesetRelPath"].(json.String)}),
                         auto_tiles = make([]Tile, len(tiles_array))
                     }
 
@@ -137,21 +130,21 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
             }
         }
 
-        current_level.int_grids = slice.clone(int_grid_layers[:])
+        current_area.int_grids = slice.clone(int_grid_layers[:])
     }
     return ldtk
 }
 
 delete_ldtk :: proc(ldtk: LDtk_Data) {
-    for level in ldtk.levels {
-        for int_grid in level.int_grids {
+    for area in ldtk.areas {
+        for int_grid in area.int_grids {
             delete_string(int_grid.tileset_asset_path)
             delete(int_grid.auto_tiles)
         }
-        delete(level.int_grids)
-        delete(level.id)
+        delete(area.int_grids)
+        delete(area.name)
     }
-    delete(ldtk.levels)
+    delete(ldtk.areas)
 }
 
 json_to_vec2 :: proc(vec_json: json.Value) -> z.Vec2 {

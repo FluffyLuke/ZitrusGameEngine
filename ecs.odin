@@ -288,25 +288,25 @@ Entity_Heart :: struct {
 Entity_Alive :: struct {}
 Entity_Dying :: struct {}
 
-create_entity :: proc(on_delete_callback: Entity_On_Delete = nil) -> (index: Entity_ID) {
+create_entity :: proc(pos: Vec3 = {0,0,0}, on_delete: Entity_On_Delete = nil) -> (index: Entity_ID) {
     index = heart.next_id
     heart.next_id += 1;
     heart.entity_masks.set(&heart.entity_masks, index, &Component_Mask {})
 
     set_component(index, Entity_Heart{
-        position = {0,0,0},
+        position = pos,
         scale = {1,1,1},
         rotation = 1,
 
-        on_delete = on_delete_callback
+        on_delete = on_delete
     })
     set_component(index, Entity_Alive{})
     return
 }
 
-set_on_delete :: proc(id: Entity_ID, on_delete_callback: Entity_On_Delete) {
+set_on_delete :: proc(id: Entity_ID, on_delete: Entity_On_Delete) {
     h, _ := get_component(id, Entity_Heart)
-    h.on_delete = on_delete_callback
+    h.on_delete = on_delete
 }
 
 destroy_entity :: proc(id: Entity_ID) -> bool {
