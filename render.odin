@@ -20,8 +20,9 @@ PPU :: 64 // 64 pixels are 1 unit in game
 MIN_DEPTH :: -100
 MAX_DEPTH ::  100
 
-BASIC_VERTEX_SHADER_PATH :: "vertex.glsl"
-BASIC_FRAGMENT_SHADER_PATH :: "fragment.glsl"
+VERTEX_PATH :: "vertex.glsl"
+FRAGMENT_BASIC_PATH :: "fragment_basic.glsl"
+FRAGMENT_LIGHT_PATH :: "fragment_light.glsl"
 
 Renderer :: struct {
     exe_path: String_Ref,
@@ -32,7 +33,8 @@ Renderer :: struct {
     window_size: Vec2Int,
     background_color: Vec4,
 
-    basic_material: u32,
+    program_basic: Program_ID,
+    program_light: Program_ID,
 }
 
 @(private)
@@ -46,12 +48,16 @@ init_renderer :: proc( exe_path: String_Ref, window_size: Vec2Int) -> bool {
     init_sdl(r) or_return
 
     // Compile basic shaders
-    vertex_shader := compile_shader(r, gl.VERTEX_SHADER, BASIC_VERTEX_SHADER_PATH) or_return
-    fragment_shader := compile_shader(r, gl.FRAGMENT_SHADER, BASIC_FRAGMENT_SHADER_PATH) or_return
+    vertex_shader := compile_shader(r, gl.VERTEX_SHADER, VERTEX_PATH) or_return
+    fragment_basic_shader := compile_shader(r, gl.FRAGMENT_SHADER, FRAGMENT_BASIC_PATH) or_return
+    fragment_light_shader := compile_shader(r, gl.FRAGMENT_SHADER, FRAGMENT_LIGHT_PATH) or_return
 
-    r.basic_material = link_to_program(r, vertex_shader, fragment_shader) or_return
+    r.program_basic = link_to_program(r, vertex_shader, fragment_basic_shader) or_return
+    r.program_light = link_to_program(r, vertex_shader, fragment_light_shader) or_return
+
     gl.DeleteShader(vertex_shader)
-    gl.DeleteShader(fragment_shader)
+    gl.DeleteShader(fragment_basic_shader)
+    gl.DeleteShader(fragment_light_shader)
 
     // Enable depth
     gl.Enable(gl.DEPTH_TEST)
@@ -100,8 +106,8 @@ compile_shader :: proc(r: ^Renderer, shader_type: u32, shader_path: string) -> (
     path := str.concatenate({r.exe_path, SHADERS_ROOT, shader_path}, context.temp_allocator)
     shader_raw, ok_file := os.read_entire_file_from_path(path, context.temp_allocator)
     if ok_file != os.ERROR_NONE {
-        fmt.printfln("ERROR: cannot FIND shader: %s", shader_path)
-        return 0, false
+        fmt.printfln("ERROR: cannot FIND shader - %s", shader_path)
+        return gl.INVALID_VALUE, false
     }
     
     shader_string := str.clone_from(shader_raw, context.temp_allocator)
@@ -111,6 +117,17 @@ compile_shader :: proc(r: ^Renderer, shader_type: u32, shader_path: string) -> (
     shader_id = gl.CreateShader(shader_type)
     gl.ShaderSource(shader_id, 1, &shader_cstr, nil)
     gl.CompileShader(shader_id)
+
+    compile_status: i32
+    gl.GetShaderiv(shader_id, gl.COMPILE_STATUS, &compile_status)
+    // TODO: learn why I need to check if this isn't 1, since INVALID_OPERATION is not always returned when error is present?
+    if compile_status == gl.INVALID_VALUE || compile_status == gl.INVALID_OPERATION || compile_status != 1 {
+        info_log: [1024 * 8]u8
+        gl.GetShaderInfoLog(shader_id, len(info_log), nil, &info_log[0])
+        fmt.printfln("ERROR: cannot COMPILE shader '%s':", shader_path)
+        fmt.printfln("%s", info_log)
+        return gl.INVALID_VALUE, false
+    }
 
     fmt.printfln("INFO: Shader '%s' compiled properly", shader_path)
 
@@ -128,12 +145,12 @@ link_to_program :: proc(r: ^Renderer, shaders: ..Shader_ID) -> (Program_ID, bool
     gl.LinkProgram(shader_program)
 
     success: i32
-    info_log: [512]u8
     gl.GetProgramiv(shader_program, gl.LINK_STATUS, &success)
 
     if success != 1 {
-        gl.GetProgramInfoLog(shader_program, 512, nil, &info_log[0])
-        fmt.printfln("ERROR: Cannot compile shader: %s", info_log)
+        info_log: [512]u8
+        gl.GetProgramInfoLog(shader_program, len(info_log), nil, &info_log[0])
+        fmt.printfln("ERROR: Cannot link program - %s", info_log)
         return 0, false
     }
 
@@ -144,7 +161,8 @@ link_to_program :: proc(r: ^Renderer, shaders: ..Shader_ID) -> (Program_ID, bool
 
 @(private)
 destroy_renderer :: proc(r: ^Renderer) {
-    gl.DeleteProgram(r.basic_material)
+    gl.DeleteProgram(r.program_basic)
+    gl.DeleteProgram(r.program_light)
 
     sdl.GL_DestroyContext(r.ctx)
     sdl.DestroyWindow(r.window)
@@ -195,8 +213,6 @@ render :: proc() {
     gl.ClearColor(r.background_color.x, r.background_color.y, r.background_color.z, r.background_color.w)
     gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-    gl.UseProgram(r.basic_material)
-
     world_height: f32 = 10.0
     aspect := f32(r.window_size.x) / f32(r.window_size.y)
     world_width := world_height * aspect
@@ -210,9 +226,11 @@ render :: proc() {
     )
     view := view(Mesh_2D)
     for e in view.entities {
-    
         h_c := get_entity_heart(e)
         m_c, _ := get_component(e, Mesh_2D)
+
+        // TODO: Changing program is expensive. Filter entities based on their program to avoid switches
+        gl.UseProgram(m_c.program)
 
         texture := m_c.texture
 
@@ -249,13 +267,17 @@ render :: proc() {
         // projection_matrix = projection_matrix * la.matrix4_perspective(f32(la.to_radians(h.camera.fov)), aspect, 0.1, 100.0)
 
         // vieport transform in shader
-        model_loc := gl.GetUniformLocation(r.basic_material, "model")
-        view_loc := gl.GetUniformLocation(r.basic_material, "view")
-        projection_loc := gl.GetUniformLocation(r.basic_material, "projection")
+        model_loc := gl.GetUniformLocation(m_c.program, "model")
+        view_loc := gl.GetUniformLocation(m_c.program, "view")
+        projection_loc := gl.GetUniformLocation(m_c.program, "projection")
         
         gl.UniformMatrix4fv(model_loc, 1, gl.FALSE, cast(^f32)&model_matrix)
         gl.UniformMatrix4fv(view_loc, 1, gl.FALSE, cast(^f32)&view_matrix)
         gl.UniformMatrix4fv(projection_loc, 1, gl.FALSE, cast(^f32)&projection_matrix)
+
+
+        light_color_loc := gl.GetUniformLocation(m_c.program, "lightColor")
+        gl.Uniform3f(light_color_loc, 0.4, 0.5, 0.12)
 
         gl.ActiveTexture(gl.TEXTURE0)
         gl.BindTexture(gl.TEXTURE_2D, m_c.texture.texture_id);

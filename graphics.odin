@@ -60,7 +60,9 @@ Mesh_2D :: struct {
 
     vao: VAO,
     ebo: EBO,
-    vbo: VBO
+    vbo: VBO,
+
+    program: Program_ID,
 }
 
 Graphics :: struct {
@@ -107,12 +109,14 @@ create_texture_mesh_full :: proc(
     }
 
     image_asset, ok := get_texture(texture_id)
-
     if !ok {
         fmt.println("ERROR: cannot create mesh")
         okay = false
         return
     }
+
+    // Set default program
+    mesh.program = heart.renderer.program_basic
 
     // === Setup geometry ===
     gl.GenVertexArrays(1, &mesh.vao)
@@ -171,6 +175,10 @@ create_texture_mesh_full :: proc(
     mesh.texture = image_asset
 
     return
+}
+
+mesh_set_program :: proc(mesh: ^Mesh_2D, program: Program_ID) {
+    mesh.program = program
 }
 
 delete_mesh :: proc(mesh: ^Mesh_2D) {

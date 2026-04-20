@@ -345,7 +345,7 @@ set_component :: proc(id: Entity_ID, component: $T) -> ^T {
     }
     set := &heart.component_pools[T]
     set_bitset(id, T, true)
-    // FIX: find better alternative than copying component
+    // FIXME: find better alternative than copying component
     copy := component
 
     component_ref: Item_Pointer = set.set(set, id, &copy)
