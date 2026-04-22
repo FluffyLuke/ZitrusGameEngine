@@ -111,7 +111,11 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                         pos := json_to_vec2(tile_obj["px"])
                         pos += offset
                         pos.y *= -1
-                        pos /= z.PPU
+                        // Move by half a tile forward and down
+                        // This is because tiles have their pivot in top left corner, not center
+                        pos += (z.Vec2 {auto_cast layer_grid_size, auto_cast -layer_grid_size} / 2)
+
+                        pos /= f32(layer_grid_size)
 
                         src := json_to_vec2(tile_obj["src"])
 
@@ -146,7 +150,9 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                         entity_pos := json_to_vec2(entity_obj["px"])
                         entity_pos += offset
                         entity_pos.y *= -1
-                        entity_pos /= z.PPU
+                        entity_pos /= f32(layer_grid_size)
+
+                        fmt.printfln("DEBUG: entity_pos: %v", entity_pos)
 
                         entity_def := Entity_Def {
                             name = str.clone(entity_obj["__identifier"].(json.String)),
@@ -180,7 +186,7 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                                     point := z.Vec2 {x, y}
                                     point += offset
                                     point.y *= -1
-                                    point /= z.PPU
+                                    point /= f32(layer_grid_size)
 
                                     entity_def.values_vec2[field_id] = point
                                 case:

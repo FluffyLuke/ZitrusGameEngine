@@ -7,7 +7,7 @@ import sdl "vendor:sdl3"
 import gl "vendor:OpenGL"
 
 Image_Resource_ID :: distinct string
-Texture_GL_Id :: u32
+Texture_GL_ID :: u32
 
 Image_Asset_Metadata_Single :: struct {
     id: string              `json:"id"`,
@@ -32,7 +32,7 @@ Image_Multiple :: struct {
 Image_Asset :: struct {
     id: Image_Resource_ID,
     dimensions: Vec2,
-    texture_id: Texture_GL_Id,
+    texture_id: Texture_GL_ID,
     using single: Image_Single,
     // type: union {
     //     Image_Single,
@@ -55,7 +55,7 @@ Mesh_2D :: struct {
     id: Mesh_ID,
     texture: Image_Asset,
 
-    dimensions: Vec2,
+    dimensions: Unit_2D,
     flip: Mesh_Flip,
 
     vao: VAO,
@@ -75,46 +75,10 @@ destroy_graphics :: proc() {
     delete(h.graphics.meshes)
 }
 
-create_texture_mesh :: proc {
-    create_texture_mesh_short,
-    create_texture_mesh_size,
-    create_texture_mesh_size_and_src,
-    create_texture_mesh_full,
-}
-
-create_texture_mesh_short :: #force_inline proc(texture_id: Image_Resource_ID) -> (mesh: Mesh_2D, okay: bool = true) {
-    return create_texture_mesh_full(texture_id, {}, {}, true, true)
-}
-
-create_texture_mesh_size :: #force_inline proc(texture_id: Image_Resource_ID, size: Vec2) -> (mesh: Mesh_2D, okay: bool = true) {
-    return create_texture_mesh_full(texture_id, size, {}, false, true)
-}
-
-create_texture_mesh_size_and_src :: #force_inline proc(texture_id: Image_Resource_ID, size: Vec2, src: Rectangle) -> (mesh: Mesh_2D, okay: bool = true) {
-    return create_texture_mesh_full(texture_id, size, src, false, false)
-}
-
-create_texture_mesh_full :: proc(
-    texture_id: Image_Resource_ID,
-    size: Vec2,
-    src: Rectangle,
-
-    default_size: bool,
-    default_src: bool,
+create_mesh :: proc(
+    size: Unit_2D,
+    src: Image_Source = {}
 ) -> (mesh: Mesh_2D, okay: bool = true) {
-    // === Setup texture ===
-    if texture_id == "" {
-        okay = false
-        return
-    }
-
-    image_asset, ok := get_texture(texture_id)
-    if !ok {
-        fmt.println("ERROR: cannot create mesh")
-        okay = false
-        return
-    }
-
     // Set default program
     mesh.program.id = Program_Basic
 
@@ -123,27 +87,19 @@ create_texture_mesh_full :: proc(
     gl.BindVertexArray(mesh.vao)
 
     vertices: [20]f32
-
-    if default_src {
+    if src != {} {
         vertices = [20]f32 {
-            0.5,  0.5, 0, 1.0, 0.0,
-            0.5, -0.5, 0, 1.0, 1.0,
-           -0.5, -0.5, 0, 0.0, 1.0,
-           -0.5,  0.5, 0, 0.0, 0.0
+            0.5,  0.5, 0, src.x_max, src.y_min,
+            0.5, -0.5, 0, src.x_max, src.y_max,
+            -0.5, -0.5, 0, src.x_min, src.y_max,
+            -0.5,  0.5, 0, src.x_min, src.y_min
         }
     } else {
-        dim := image_asset.dimensions
-
-        t_x_min := src.x / dim.x
-        t_x_max := (src.x + src.width) / dim.x
-        t_y_min := src.y / dim.y
-        t_y_max := (src.y + src.height) / dim.y
-
         vertices = [20]f32 {
-            0.5,  0.5, 0, t_x_max, t_y_min,
-            0.5, -0.5, 0, t_x_max, t_y_max,
-           -0.5, -0.5, 0, t_x_min, t_y_max,
-           -0.5,  0.5, 0, t_x_min, t_y_min
+            0.5,  0.5, 0, 1, 0,
+            0.5, -0.5, 0, 1, 1,
+            -0.5, -0.5, 0, 0, 1,
+            -0.5,  0.5, 0, 0, 0
         }
     }
 
@@ -171,10 +127,89 @@ create_texture_mesh_full :: proc(
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, 0)
     gl.BindBuffer(gl.ARRAY_BUFFER, 0)
 
-    mesh.dimensions = default_size ? image_asset.dimensions : size
-    mesh.texture = image_asset
+    mesh.dimensions = size
 
     return
+}
+
+Image_Source :: struct {
+    x_min: f32,
+    x_max: f32,
+    y_min: f32,
+    y_max: f32,
+}
+
+// Translates rectangle that holds pixels to values between 0 and 1
+rectangle_to_image_source :: proc(src: Rectangle, dim: Vec2) -> Image_Source {
+    return {
+        x_min = src.x / dim.x,
+        x_max = (src.x + src.width) / dim.x,
+        y_min = src.y / dim.y,
+        y_max = (src.y + src.height) / dim.y,
+    }
+}
+
+mesh_swap_texture :: proc(mesh: ^Mesh_2D, texture_id: Image_Resource_ID) -> bool {
+    if texture_id == "" {
+        return false
+    }
+
+    image_asset, ok := get_texture(texture_id)
+
+    if !ok {
+        fmt.println("ERROR: Cannot find texture for mesh")
+        return false
+    }
+    mesh.texture = image_asset
+    return true
+}
+
+mesh_set_texture :: proc(mesh: ^Mesh_2D, texture_id: Image_Resource_ID, src: Image_Source = {}) -> bool {
+    // === Setup texture ===
+    if texture_id == "" {
+        return false
+    }
+
+    image_asset, ok := get_texture(texture_id)
+
+    if !ok {
+        fmt.println("ERROR: Cannot find texture for mesh")
+        return false
+    }
+    mesh.texture = image_asset
+    gl.BindVertexArray(mesh.vao)
+
+    gl.BindBuffer(gl.ARRAY_BUFFER, 0)
+    gl.DeleteBuffers(1, &mesh.vbo)
+
+    dim := image_asset.dimensions
+
+    vertices: [20]f32
+    if src != {} {
+        vertices = [20]f32 {
+            0.5,  0.5, 0, src.x_max, src.y_min,
+            0.5, -0.5, 0, src.x_max, src.y_max,
+            -0.5, -0.5, 0, src.x_min, src.y_max,
+            -0.5,  0.5, 0, src.x_min, src.y_min
+        }
+    } else {
+        vertices = [20]f32 {
+            0.5,  0.5, 0, 1, 0,
+            0.5, -0.5, 0, 1, 1,
+            -0.5, -0.5, 0, 0, 1,
+            -0.5,  0.5, 0, 0, 0
+        }
+    }
+
+    gl.GenBuffers(1, &mesh.vbo)
+    gl.BindBuffer(gl.ARRAY_BUFFER, mesh.vbo)
+    gl.BufferData(gl.ARRAY_BUFFER, len(vertices) * size_of(f32), raw_data(&vertices), gl.STATIC_DRAW)
+
+    // Unbind all of the stuff
+    gl.BindVertexArray(0)
+    gl.BindBuffer(gl.ARRAY_BUFFER, 0)
+
+    return true
 }
 
 mesh_set_program :: proc(mesh: ^Mesh_2D, program: Program_ID) {

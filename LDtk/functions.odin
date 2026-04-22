@@ -50,10 +50,17 @@ create_area_mesh :: proc(ldtk: ^LDtk_Data, index: Area_Index) {
     for grid in area.int_grids {
         for tile in grid.auto_tiles {
             image_id := z.Image_Resource_ID(grid.tileset_asset_path)
-            mesh, ok := z.create_texture_mesh_size_and_src(image_id, {tile.pos.width, tile.pos.height}, tile.src)
-            
+            //mesh, ok := z.create_mesh({tile.pos.width, tile.pos.height}, z.rectangle_to_image_source(tile.src, {512, 512}))
+            mesh, ok := z.create_mesh({1, 1}, z.rectangle_to_image_source(tile.src, {512, 512}))
             if !ok {
-                fmt.printfln("ERROR: Cannot create tile from area '%v'!", area_name)
+                fmt.printfln("ERROR: Cannot create tile mesh from area '%v'!", area_name)
+                z.delete_mesh(&mesh)
+                continue
+            }
+
+            ok = z.mesh_swap_texture(&mesh, image_id)
+            if !ok {
+                fmt.printfln("ERROR: Cannot set texture for tile mesh from area '%v'!", area_name)
                 z.delete_mesh(&mesh)
                 continue
             }
