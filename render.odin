@@ -20,9 +20,12 @@ PPU :: 64 // 64 pixels are 1 unit in game
 MIN_DEPTH :: -100
 MAX_DEPTH ::  100
 
-VERTEX_PATH :: "vertex.glsl"
-FRAGMENT_BASIC_PATH :: "fragment_basic.glsl"
+VERTEX_PATH :: "vertex_base.glsl"
+FRAGMENT_BASIC_PATH :: "fragment_base.glsl"
 FRAGMENT_LIGHT_PATH :: "fragment_light.glsl"
+
+Program_Basic: Program_ID
+Program_Light: Program_ID
 
 Renderer :: struct {
     exe_path: String_Ref,
@@ -32,9 +35,20 @@ Renderer :: struct {
 
     window_size: Vec2Int,
     background_color: Vec4,
+}
 
-    program_basic: Program_ID,
-    program_light: Program_ID,
+Shader_Parameter :: struct($T: typeid) {
+    name: string,
+    value: T,
+}
+
+Program_Data :: struct {
+    id: Program_ID,
+    vec3: [dynamic]Shader_Parameter(Vec3),
+}
+
+delete_program_data :: proc(data: ^Program_Data) {
+    delete(data.vec3)
 }
 
 @(private)
@@ -48,15 +62,15 @@ init_renderer :: proc( exe_path: String_Ref, window_size: Vec2Int) -> bool {
     init_sdl(r) or_return
 
     // Compile basic shaders
-    vertex_shader := compile_shader(r, gl.VERTEX_SHADER, VERTEX_PATH) or_return
-    fragment_basic_shader := compile_shader(r, gl.FRAGMENT_SHADER, FRAGMENT_BASIC_PATH) or_return
+    vertex_base_shader := compile_shader(r, gl.VERTEX_SHADER, VERTEX_PATH) or_return
+    fragment_base_shader := compile_shader(r, gl.FRAGMENT_SHADER, FRAGMENT_BASIC_PATH) or_return
     fragment_light_shader := compile_shader(r, gl.FRAGMENT_SHADER, FRAGMENT_LIGHT_PATH) or_return
 
-    r.program_basic = link_to_program(r, vertex_shader, fragment_basic_shader) or_return
-    r.program_light = link_to_program(r, vertex_shader, fragment_light_shader) or_return
+    Program_Basic = link_to_program(r, vertex_base_shader, fragment_base_shader) or_return
+    Program_Light = link_to_program(r, vertex_base_shader, fragment_light_shader) or_return
 
-    gl.DeleteShader(vertex_shader)
-    gl.DeleteShader(fragment_basic_shader)
+    gl.DeleteShader(vertex_base_shader)
+    gl.DeleteShader(fragment_base_shader)
     gl.DeleteShader(fragment_light_shader)
 
     // Enable depth
@@ -161,8 +175,8 @@ link_to_program :: proc(r: ^Renderer, shaders: ..Shader_ID) -> (Program_ID, bool
 
 @(private)
 destroy_renderer :: proc(r: ^Renderer) {
-    gl.DeleteProgram(r.program_basic)
-    gl.DeleteProgram(r.program_light)
+    gl.DeleteProgram(Program_Basic)
+    gl.DeleteProgram(Program_Light)
 
     sdl.GL_DestroyContext(r.ctx)
     sdl.DestroyWindow(r.window)
@@ -229,8 +243,8 @@ render :: proc() {
         h_c := get_entity_heart(e)
         m_c, _ := get_component(e, Mesh_2D)
 
-        // TODO: Changing program is expensive. Filter entities based on their program to avoid switches
-        gl.UseProgram(m_c.program)
+        // FIXME: Changing program is expensive. Filter entities based on their program to avoid switches
+        gl.UseProgram(m_c.program.id)
 
         texture := m_c.texture
 
@@ -267,17 +281,22 @@ render :: proc() {
         // projection_matrix = projection_matrix * la.matrix4_perspective(f32(la.to_radians(h.camera.fov)), aspect, 0.1, 100.0)
 
         // vieport transform in shader
-        model_loc := gl.GetUniformLocation(m_c.program, "model")
-        view_loc := gl.GetUniformLocation(m_c.program, "view")
-        projection_loc := gl.GetUniformLocation(m_c.program, "projection")
+        model_loc := gl.GetUniformLocation(m_c.program.id, "model")
+        view_loc := gl.GetUniformLocation(m_c.program.id, "view")
+        projection_loc := gl.GetUniformLocation(m_c.program.id, "projection")
         
         gl.UniformMatrix4fv(model_loc, 1, gl.FALSE, cast(^f32)&model_matrix)
         gl.UniformMatrix4fv(view_loc, 1, gl.FALSE, cast(^f32)&view_matrix)
         gl.UniformMatrix4fv(projection_loc, 1, gl.FALSE, cast(^f32)&projection_matrix)
 
 
-        light_color_loc := gl.GetUniformLocation(m_c.program, "lightColor")
-        gl.Uniform3f(light_color_loc, 0.4, 0.5, 0.12)
+        for param in m_c.program.vec3 {
+            param_name_cstr := str.clone_to_cstring(param.name, context.temp_allocator)
+            loc := gl.GetUniformLocation(m_c.program.id, param_name_cstr)
+            gl.Uniform3f(loc, param.value.x, param.value.y, param.value.z)
+        }
+
+        free_all(context.temp_allocator)
 
         gl.ActiveTexture(gl.TEXTURE0)
         gl.BindTexture(gl.TEXTURE_2D, m_c.texture.texture_id);

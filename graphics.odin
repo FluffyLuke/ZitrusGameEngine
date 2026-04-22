@@ -62,7 +62,7 @@ Mesh_2D :: struct {
     ebo: EBO,
     vbo: VBO,
 
-    program: Program_ID,
+    program: Program_Data,
 }
 
 Graphics :: struct {
@@ -116,7 +116,7 @@ create_texture_mesh_full :: proc(
     }
 
     // Set default program
-    mesh.program = heart.renderer.program_basic
+    mesh.program.id = Program_Basic
 
     // === Setup geometry ===
     gl.GenVertexArrays(1, &mesh.vao)
@@ -178,7 +178,26 @@ create_texture_mesh_full :: proc(
 }
 
 mesh_set_program :: proc(mesh: ^Mesh_2D, program: Program_ID) {
-    mesh.program = program
+    mesh.program.id = program
+}
+
+mesh_set_parameter_vec4 :: proc(mesh: ^Mesh_2D, name: string, value: Vec3) {
+    append(&mesh.program.vec3, Shader_Parameter(Vec3) {name, value})
+}
+
+mesh_delete_parameter_vec4 :: proc(mesh: ^Mesh_2D, name: string) -> bool {
+    index: int = -1
+    for v, i in mesh.program.vec3 {
+        if v.name == name {
+            index = i
+            break
+        }
+    }
+    if index != -1 {
+        unordered_remove(&mesh.program.vec3, index)
+        return true
+    }
+    return false
 }
 
 delete_mesh :: proc(mesh: ^Mesh_2D) {
@@ -188,6 +207,8 @@ delete_mesh :: proc(mesh: ^Mesh_2D) {
     gl.DeleteVertexArrays(1, &mesh.vao)
     gl.DeleteBuffers(1, &mesh.ebo)
     gl.DeleteBuffers(1, &mesh.vbo)
+
+    delete_program_data(&mesh.program)
 
     delete_key(&g.meshes, mesh.id)
 

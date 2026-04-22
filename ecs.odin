@@ -185,6 +185,18 @@ update_heart :: proc() -> bool {
 }
 
 destroy_heart :: proc() {
+    // TODO: make this in dev build only
+    // TODO: this can slow down the exit process, but will avoid all memory sanatizer errors
+    // TODO: when entity has resources to delete
+    view := view(Entity_Heart)
+    defer destroy_view(&view)
+    for e in view.entities {
+        h := get_entity_heart(e)
+        if h.on_delete != nil {
+            h.on_delete(e)
+        } 
+    }
+
     heart.entity_masks.destroy_set(&heart.entity_masks)
 
     defer delete(heart.entity_groups)
