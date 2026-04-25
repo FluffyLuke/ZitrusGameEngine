@@ -90,7 +90,7 @@ load_texture :: proc(relative_path: string, persist: bool = false) -> (Image_Res
     // }
     //asset.id = Image_Resource_ID(str.clone(asset_meta.id))
 
-    asset.id = asset_id
+    asset.asset_id = asset_id
 
     // switch root["type"].(json.String) {
     //     case "single": {
@@ -127,14 +127,14 @@ load_texture :: proc(relative_path: string, persist: bool = false) -> (Image_Res
     if err != nil {
         fmt.printfln("ERROR: cannot READ texture file '%s': %s ... ", relative_path, err)
         fmt.printfln("ERROR: ... absolute path to file: '%s'", path)
-        delete_string(string(asset.id))
+        delete_string(string(asset.asset_id))
         return "", false
     }
 
     asset.dimensions = {auto_cast texture.width, auto_cast texture.height}
 
-    gl.GenTextures(1, &asset.texture_id)
-    gl.BindTexture(gl.TEXTURE_2D, asset.texture_id)
+    gl.GenTextures(1, &asset.gl_id)
+    gl.BindTexture(gl.TEXTURE_2D, asset.gl_id)
 
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT)
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT)
@@ -176,20 +176,20 @@ asset_manager_unload_textures :: proc(also_persist: bool) {
     am := &h.asset_manager
 
     for k, &image in am.image_assets {
-        fmt.printfln("INFO: deleting texture: %s", image.id)
+        fmt.printfln("INFO: deleting texture: %s", image.asset_id)
         delete_string(string(k))
-        delete_string(string(image.id))
-        gl.DeleteTextures(1, &image.texture_id)
+        delete_string(string(image.asset_id))
+        gl.DeleteTextures(1, &image.gl_id)
     }
     clear(&am.image_assets)
 
 
     if also_persist {
         for k, &image in am.image_assets_pesist {
-            fmt.printfln("INFO: deleting texture: %s", image.id)
+            fmt.printfln("INFO: deleting texture: %s", image.asset_id)
             delete_string(string(k))
-            delete_string(string(image.id))
-            gl.DeleteTextures(1, &image.texture_id)
+            delete_string(string(image.asset_id))
+            gl.DeleteTextures(1, &image.gl_id)
         }
         clear(&am.image_assets_pesist)
     }

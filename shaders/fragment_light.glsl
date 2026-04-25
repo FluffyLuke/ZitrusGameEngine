@@ -3,11 +3,9 @@
 out vec4 FragColor;
 
 in vec2 TexCoord;
+in float Distance;
 
 uniform sampler2D ourTexture;
-
-uniform vec3 ambientLightColor;
-uniform float ambientStrength;
 
 void main()
 {

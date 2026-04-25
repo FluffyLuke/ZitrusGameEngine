@@ -26,12 +26,13 @@ Unit :: distinct f32
 MIN_DEPTH :: -100
 MAX_DEPTH ::  100
 
-VERTEX_PATH :: "vertex_base.glsl"
+VERTEX_BASIC_PATH :: "vertex_base.glsl"
 FRAGMENT_BASIC_PATH :: "fragment_base.glsl"
-// FRAGMENT_LIGHT_PATH :: "fragment_light.glsl"
+VERTEX_SCREEN_PATH :: "vertex_screen.glsl"
+FRAGMENT_SCREEN_PATH :: "fragment_screen.glsl"
 
 Program_Basic: Program_ID
-// Program_Light: Program_ID
+Program_Screen: Program_ID
 
 Renderer :: struct {
     global_ambient_color: Vec3,
@@ -45,10 +46,7 @@ Renderer :: struct {
     window_size: Vec2Int,
     background_color: Vec4,
 
-    frame_buffer: FBO,
-    render_buffer: RBO,
-    frame_buffer_texture: Texture_GL_ID,
-    screen_buffer_mesh: Mesh_2D,
+    screen_mesh: Screen_Mesh,
 }
 
 Shader_Parameter :: struct($T: typeid) {
@@ -75,58 +73,33 @@ init_renderer :: proc( exe_path: String_Ref, window_size: Vec2Int) -> bool {
     
     init_sdl(r) or_return
 
-    // Compile basic shaders
-    vertex_base_shader := compile_shader(r, gl.VERTEX_SHADER, VERTEX_PATH) or_return
+    // === Compile basic shaders ===
+    vertex_base_shader := compile_shader(r, gl.VERTEX_SHADER, VERTEX_BASIC_PATH) or_return
     fragment_base_shader := compile_shader(r, gl.FRAGMENT_SHADER, FRAGMENT_BASIC_PATH) or_return
-    // fragment_light_shader := compile_shader(r, gl.FRAGMENT_SHADER, FRAGMENT_LIGHT_PATH) or_return
-
     Program_Basic = link_to_program(r, vertex_base_shader, fragment_base_shader) or_return
-    // Program_Light = link_to_program(r, vertex_base_shader, fragment_light_shader) or_return
-
     gl.DeleteShader(vertex_base_shader)
     gl.DeleteShader(fragment_base_shader)
-    // gl.DeleteShader(fragment_light_shader)
+
+    vertex_screen_shader := compile_shader(r, gl.VERTEX_SHADER, VERTEX_SCREEN_PATH) or_return
+    fragment_screen_shader := compile_shader(r, gl.FRAGMENT_SHADER, FRAGMENT_SCREEN_PATH) or_return
+    Program_Screen = link_to_program(r, vertex_screen_shader, fragment_screen_shader) or_return
+    gl.DeleteShader(vertex_screen_shader)
+    gl.DeleteShader(fragment_screen_shader)
+
 
     // Enable depth
     gl.Enable(gl.DEPTH_TEST)
-
     // Turn on blending (multiply pixels by textures alpha channel)
     gl.Enable(gl.BLEND)
 
-    // Generate another frame buffer and texture for it + render buffer
-    gl.GenFramebuffers(1, &r.frame_buffer)
-    gl.BindFramebuffer(gl.FRAMEBUFFER, r.frame_buffer)
-
-    // TODO: When screen changes size - resize the texture as well
-    gl.GenTextures(1, &r.frame_buffer_texture)
-    gl.BindTexture(gl.TEXTURE_2D, r.frame_buffer_texture);
-    gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, window_size.x, window_size.y, 0, gl.RGB, gl.UNSIGNED_BYTE, nil);
-    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.BindTexture(gl.TEXTURE_2D, 0);
-
-    gl.GenRenderbuffers(1, &r.render_buffer)
-    gl.BindRenderbuffer(gl.RENDERBUFFER, r.render_buffer); 
-    gl.RenderbufferStorage(gl.RENDERBUFFER, gl.DEPTH24_STENCIL8, window_size.x, window_size.y);  
-    gl.BindRenderbuffer(gl.RENDERBUFFER, 0);
-
-    gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, r.render_buffer)
-
-    if gl.CheckFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE {
-        fmt.println("ERROR: Framebuffer is not complete")
-        gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
-        return false
-    }
-
-    gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
-
-    // Create texture mesh
-    ok: bool
-    r.screen_buffer_mesh, ok = create_mesh({auto_cast window_size.x, auto_cast window_size.y})
+    // Create screen mesh
+    screen_mesh, ok := create_screen_mesh({auto_cast window_size.x, auto_cast window_size.y})
     if !ok {
-        fmt.printfln("ERROR: Cannot create mesh for frame buffer")
+        fmt.printfln("ERROR: Cannot screen mesh")
         return false
     }
+
+    r.screen_mesh = screen_mesh
     
     
     // Set the standard alpha blending equation (multiply what's left by the backgrounds color)
@@ -229,13 +202,99 @@ link_to_program :: proc(r: ^Renderer, shaders: ..Shader_ID) -> (Program_ID, bool
 destroy_renderer :: proc(r: ^Renderer) {
     gl.DeleteProgram(Program_Basic)
 
-    gl.DeleteFramebuffers(1, &heart.renderer.frame_buffer)
+    delete_screen_mesh(&r.screen_mesh)
 
     // gl.DeleteProgram(Program_Light)
 
     sdl.GL_DestroyContext(r.ctx)
     sdl.DestroyWindow(r.window)
     sdl.Quit()
+}
+
+Screen_Mesh :: struct {
+    frame_buffer: FBO,
+    render_buffer: RBO,
+    vao: VAO,
+    vbo: VBO,
+
+    program: Program_ID,
+    gl_texture_id: Texture_GL_ID,
+}
+
+create_screen_mesh :: proc(window_size: Vec2Int) -> (Screen_Mesh, bool) {
+    screen: Screen_Mesh
+    screen.program = Program_Screen
+
+    screen_vertices := [24]f32 {  
+        // positions   // texCoords
+        -1.0,  1.0,  0.0, 1.0,
+        -1.0, -1.0,  0.0, 0.0,
+         1.0, -1.0,  1.0, 0.0,
+    
+        -1.0,  1.0,  0.0, 1.0,
+         1.0, -1.0,  1.0, 0.0,
+         1.0,  1.0,  1.0, 1.0
+    };
+
+    gl.GenVertexArrays(1, &screen.vao)
+    gl.BindVertexArray(screen.vao)
+
+    gl.GenBuffers(1, &screen.vbo)
+    gl.BindBuffer(gl.ARRAY_BUFFER, screen.vbo)
+    gl.BufferData(gl.ARRAY_BUFFER, len(screen_vertices) * size_of(f32), raw_data(&screen_vertices), gl.STATIC_DRAW)
+
+    gl.VertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, 4 * size_of(f32), uintptr(0))
+    gl.EnableVertexAttribArray(0)
+
+    gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 4 * size_of(f32), uintptr(2 * size_of(f32)))
+    gl.EnableVertexAttribArray(1);
+
+    gl.BindVertexArray(0)
+    gl.BindBuffer(gl.ARRAY_BUFFER, 0)
+
+    //  === Generate another frame buffer and texture for it + render buffer ===
+    gl.GenFramebuffers(1, &screen.frame_buffer)
+    gl.BindFramebuffer(gl.FRAMEBUFFER, screen.frame_buffer)
+
+    // FIXME: When screen changes size - resize the texture as well
+    // === Generate texture for frame buffer ===
+    gl.GenTextures(1, &screen.gl_texture_id)
+    gl.BindTexture(gl.TEXTURE_2D, screen.gl_texture_id);
+    gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, window_size.x, window_size.y, 0, gl.RGB, gl.UNSIGNED_BYTE, nil);
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.BindTexture(gl.TEXTURE_2D, 0);
+
+    // attach texture to frame buffer
+    gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, screen.gl_texture_id, 0)
+
+    // === Create render buffer for depth and stencil testing
+    gl.GenRenderbuffers(1, &screen.render_buffer)
+    gl.BindRenderbuffer(gl.RENDERBUFFER, screen.render_buffer); 
+    gl.RenderbufferStorage(gl.RENDERBUFFER, gl.DEPTH24_STENCIL8, window_size.x, window_size.y);  
+    gl.BindRenderbuffer(gl.RENDERBUFFER, 0);
+
+    // attach render buffer
+    gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, screen.render_buffer)
+
+    if gl.CheckFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE {
+        fmt.println("ERROR: Framebuffer is not complete")
+        gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
+        return {}, false
+    }
+
+    // unbind frame buffer to avoid errors
+    gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
+
+    return screen, true
+}
+
+delete_screen_mesh :: proc(screen_mesh: ^Screen_Mesh) {
+    gl.DeleteFramebuffers(1, &screen_mesh.frame_buffer)
+    gl.DeleteVertexArrays(1, &screen_mesh.vao)
+    gl.DeleteBuffers(1, &screen_mesh.vbo)
+    gl.DeleteRenderbuffers(1, &screen_mesh.render_buffer)
+    gl.DeleteTextures(1, &screen_mesh.gl_texture_id)
 }
 
 set_ambient_strength :: proc(s: f32) {
@@ -302,21 +361,30 @@ resize_window_vec :: proc(size: Vec2Int) {
 render :: proc() {
     r := &heart.renderer
 
+    // https://learnopengl.com/Advanced-OpenGL/Framebuffers
+    // === STAGE 1 - DRAW WORLD ===
+    gl.BindFramebuffer(gl.FRAMEBUFFER, r.screen_mesh.frame_buffer)
+
     gl.ClearColor(r.background_color.x, r.background_color.y, r.background_color.z, r.background_color.w)
     gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-
+    
     pipeline_lit_entities()
 
+    // === STAGE 2 - ADD SHADOWS ===
+    gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
+
+    gl.ClearColor(0.0, 0.0, 0.0, 1.0)
+    gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+    pipeline_light_entities()
+
+    // Display image
     sdl.GL_SwapWindow(r.window)
 }
 
 @(private="file")
 pipeline_lit_entities :: proc() {
     r := &heart.renderer
-
-    // gl.BindFramebuffer(gl.FRAMEBUFFER, r.frame_buffer)
-    // It is technically possible to attach depth and stencil to a texture
-    // https://learnopengl.com/Advanced-OpenGL/Framebuffers
 
     camera_view := la.matrix4_look_at(
         heart.camera.position, 
@@ -396,15 +464,38 @@ pipeline_lit_entities :: proc() {
 
         free_all(context.temp_allocator)
 
-        gl.ActiveTexture(gl.TEXTURE0)
-        gl.BindTexture(gl.TEXTURE_2D, m_c.texture.texture_id);
+        // gl.ActiveTexture(gl.TEXTURE0)
+        gl.BindTexture(gl.TEXTURE_2D, m_c.texture.gl_id);
         gl.BindVertexArray(m_c.vao)
         gl.DrawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, nil)
         //gl.DrawArrays(gl.TRIANGLES, 0, 36)
     }
 }
 
+Light_2D :: struct {
+    color: Vec3,
+    fade_range: f32,
+    max_range: f32,
+    strength: f32,
+}
+
 @(private="file")
 pipeline_light_entities :: proc() {
-    gl.BindFramebuffer(gl.FRAMEBUFFER, 0);   
+    r := &heart.renderer
+
+    gl.UseProgram(r.screen_mesh.program)
+    gl.BindFramebuffer(gl.FRAMEBUFFER, 0);
+
+    camera_view := la.matrix4_look_at(
+        heart.camera.position, 
+        heart.camera.position + heart.camera.direction,
+        heart.camera.cameraUp
+    )
+
+    view := view(Mesh_2D)
+    defer destroy_view(&view)
+
+    gl.BindTexture(gl.TEXTURE_2D, r.screen_mesh.gl_texture_id);
+    gl.BindVertexArray(r.screen_mesh.vao)
+    gl.DrawArrays(gl.TRIANGLES, 0, 6)
 }

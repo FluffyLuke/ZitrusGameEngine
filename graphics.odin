@@ -30,9 +30,9 @@ Image_Multiple :: struct {
 }
 
 Image_Asset :: struct {
-    id: Image_Resource_ID,
+    asset_id: Image_Resource_ID,
     dimensions: Vec2,
-    texture_id: Texture_GL_ID,
+    gl_id: Texture_GL_ID,
     using single: Image_Single,
     // type: union {
     //     Image_Single,
@@ -127,6 +127,8 @@ create_mesh :: proc(
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, 0)
     gl.BindBuffer(gl.ARRAY_BUFFER, 0)
 
+    mesh.id = next_mesh_id
+    next_mesh_id += 1
     mesh.dimensions = size
 
     return
