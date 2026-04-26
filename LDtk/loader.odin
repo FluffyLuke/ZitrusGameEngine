@@ -86,7 +86,8 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
         entities := make([dynamic]Entity_Def, allocator = context.temp_allocator)
 
         // Depth is assigned to intgrid layers and used layer for rendering
-        layer_depth: uint = 0
+        // It starts from fifth layer, to make room for displaying stuff in front of it
+        layer_depth: uint = 4
         for layer in layers {
             layer_obj := layer.(json.Object)
             layer_id := layer_obj["__identifier"].(json.String)

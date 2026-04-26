@@ -17,8 +17,8 @@ Renderer :: struct {
     background_color: rl.Color,
 }
 
-WINDOW_HEIGHT :: 9
-WINDOW_WIDTH :: 16
+WINDOW_UNIT_HEIGHT :: 9
+WINDOW_UNIT_WIDTH :: 16
 
 Unit2 :: distinct [2]f32
 Unit :: distinct f32
@@ -73,16 +73,19 @@ render :: proc() {
                 h_c := get_entity_heart(e)
                 mesh, _ := get_component(e, Mesh_2D)
 
+                // Get unit system scale factor
+                unit_scale_x, unit_scale_y := f32(rl.GetScreenWidth()) / WINDOW_UNIT_WIDTH, f32(rl.GetScreenHeight()) / WINDOW_UNIT_HEIGHT
+
                 dest := rl.Rectangle {
-                    x = h_c.position.x,
-                    y = h_c.position.y,
-                    width = mesh.dimensions.x,
-                    height = mesh.dimensions.y,
+                    x = h_c.position.x * h_c.scale.x * unit_scale_x,
+                    y = h_c.position.y * h_c.scale.y * unit_scale_y * -1, // RAYLIB has inverted Y axis
+                    width = mesh.dimensions.x * h_c.scale.x * unit_scale_x,
+                    height = mesh.dimensions.y * h_c.scale.y * unit_scale_y,
                 }
 
                 origin := rl.Vector2 {
-                    mesh.dimensions.x / 2.0,
-                    mesh.dimensions.y / 2.0,
+                    (mesh.dimensions.x * h_c.scale.x * unit_scale_x) / 2.0,
+                    (mesh.dimensions.y * h_c.scale.y * unit_scale_y) / 2.0,
                 }
 
                 src := rl_convert_rectangle(auto_cast mesh.src)
