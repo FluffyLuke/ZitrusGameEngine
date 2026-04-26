@@ -1,9 +1,10 @@
 package zitrus
 
 import "core:fmt"
-
 import "core:math"
 import "core:math/rand"
+
+import rl "vendor:raylib"
 
 Vec4 :: [4]f32
 Vec3 :: [3]f32
@@ -50,4 +51,15 @@ get_random_point3 :: proc(circle: Circle) -> Vec3 {
     point: Vec3 = {math.sin(how_much), math.cos(how_much), 0} * circle.radius
 
     return point + Vec3 {circle.x, circle.y, 0}
+}
+
+// === Functions for raylib ===
+
+rl_convert_rectangle :: #force_inline proc(rec: Rectangle) -> rl.Rectangle {
+    return {
+        x = rec.x,
+        y = rec.y,
+        width = rec.width,
+        height = rec.height
+    }
 }

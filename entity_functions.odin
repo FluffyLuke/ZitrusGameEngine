@@ -8,44 +8,44 @@ get_entity_heart :: #force_inline proc(entity: Entity_ID) -> ^Entity_Heart {
     return heart
 }
 
-get_position :: proc(entity: Entity_ID, position: Vec3) -> Vec3 {
+get_position :: proc(entity: Entity_ID, position: Vec2) -> Vec2 {
     heart := get_entity_heart(entity)
     return heart.position
 }
 
-set_position :: proc(entity: Entity_ID, position: Vec3) {
+set_position :: proc(entity: Entity_ID, position: Vec2) {
     heart := get_entity_heart(entity)
     heart.position = position
 }
 
-update_position :: proc(entity: Entity_ID, position_update: Vec3) -> Vec3 {
+update_position :: proc(entity: Entity_ID, position_update: Vec2) -> Vec2 {
     heart := get_entity_heart(entity)
     heart.position += position_update
     return heart.position
 }
 
-get_rotation_2D :: proc(entity: Entity_ID, up: Vec3 = Up_Vec) -> Vec3 {
-    heart := get_entity_heart(entity)
+// get_rotation_2D :: proc(entity: Entity_ID, up: Vec3 = Up_Vec) -> Vec3 {
+//     heart := get_entity_heart(entity)
 
-    return la.mul(heart.rotation, up)
-}
+//     return la.mul(heart.rotation, up)
+// }
 
-set_rotation :: proc(entity: Entity_ID, rotation: Vec3) {
-    heart := get_entity_heart(entity)
+// set_rotation :: proc(entity: Entity_ID, rotation: Vec2) {
+//     heart := get_entity_heart(entity)
 
-    rad := rotation * la.to_radians(f32(1.0))
+//     rad := rotation * la.to_radians(f32(1.0))
 
-    heart.rotation = la.quaternion_angle_axis(rad.x, Vec3 {1,0,0}) \
-        * la.quaternion_angle_axis(rad.y, Vec3 {0,1,0}) \
-        * la.quaternion_angle_axis(rad.z, Vec3 {0,0,1})
-}
+//     heart.rotation = la.quaternion_angle_axis(rad.x, Vec3 {1,0,0}) \
+//         * la.quaternion_angle_axis(rad.y, Vec3 {0,1,0}) \
+//         * la.quaternion_angle_axis(rad.z, Vec3 {0,0,1})
+// }
 
-update_rotation :: proc(entity: Entity_ID, rotation: Vec3) {
-    heart := get_entity_heart(entity)
+// update_rotation :: proc(entity: Entity_ID, rotation: Vec3) {
+//     heart := get_entity_heart(entity)
 
-    rad := rotation * la.to_radians(f32(1.0))
+//     rad := rotation * la.to_radians(f32(1.0))
 
-    heart.rotation *= la.quaternion_angle_axis(rad.x, Vec3 {1,0,0}) \
-        * la.quaternion_angle_axis(rad.y, Vec3 {0,1,0}) \
-        * la.quaternion_angle_axis(rad.z, Vec3 {0,0,1})
-}
+//     heart.rotation *= la.quaternion_angle_axis(rad.x, Vec3 {1,0,0}) \
+//         * la.quaternion_angle_axis(rad.y, Vec3 {0,1,0}) \
+//         * la.quaternion_angle_axis(rad.z, Vec3 {0,0,1})
+// }

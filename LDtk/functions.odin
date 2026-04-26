@@ -38,7 +38,6 @@ entity_get_string :: proc(entity: Entity_Def, value_id: string) -> (z.String_Ref
 }
 
 create_area_mesh :: proc(ldtk: ^LDtk_Data, index: Area_Index) {
-
     if index > len(ldtk.areas) - 1 || index < 0 {
         fmt.printfln("ERROR: cannot create area mesh: bad index")
         return
@@ -51,37 +50,26 @@ create_area_mesh :: proc(ldtk: ^LDtk_Data, index: Area_Index) {
         for tile in grid.auto_tiles {
             image_id := z.Image_Resource_ID(grid.tileset_asset_path)
             //mesh, ok := z.create_mesh({tile.pos.width, tile.pos.height}, z.rectangle_to_image_source(tile.src, {512, 512}))
-            mesh, ok := z.create_mesh({1, 1}, z.rectangle_to_image_source(tile.src, {512, 512}))
-            if !ok {
-                fmt.printfln("ERROR: Cannot create tile mesh from area '%v'!", area_name)
-                z.delete_mesh(&mesh)
-                continue
-            }
+            mesh := z.create_mesh({1, 1}, grid.depth)
+            // if !ok {
+            //     fmt.printfln("ERROR: Cannot create tile mesh from area '%v'!", area_name)
+            //     z.delete_mesh(&mesh)
+            //     continue
+            // }
 
-            ok = z.mesh_swap_texture(&mesh, image_id)
+            ok := z.mesh_set_texture(&mesh, image_id, {tile.src.x, tile.src.y, tile.src.width, tile.src.height})
             if !ok {
                 fmt.printfln("ERROR: Cannot set texture for tile mesh from area '%v'!", area_name)
                 z.delete_mesh(&mesh)
                 continue
             }
 
-            tile_id := z.create_entity(on_delete = proc(id: z.Sparse_Index) {
+            tile_id := z.create_entity({tile.pos.x, tile.pos.y},  on_delete = proc(id: z.Sparse_Index) {
                 mesh, _ := z.get_component(id, z.Mesh_2D)
                 z.delete_mesh(mesh)
             })
 
             mesh_ref := z.set_component(tile_id, mesh)
-
-            // rotation_vector: z.Vec3
-            // switch tile.flip {
-            //     case .None: rotation_vector = {0,0,0}
-            //     case .X:    rotation_vector = {0,0,0}
-            //     case .Y:    rotation_vector = {0,0,0}
-            //     case .XY:   rotation_vector = {0,0,90}
-            // }
-
-            // z.set_rotation(tile_id, rotation_vector)
-            z.set_position(tile_id, {tile.pos.x, tile.pos.y,0})
         }
     }
     fmt.printfln("INFO: Created mesh for area '%v'", area_name)

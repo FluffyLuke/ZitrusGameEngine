@@ -5,7 +5,7 @@ import "core:os"
 import "core:time"
 import la "core:math/linalg"
 
-import sdl "vendor:sdl3"
+import rl "vendor:raylib"
 
 // https://github.com/chrischristakis/seecs/blob/master/seecs.h
 // https://www.youtube.com/watch?v=yyZMoE1FAJ0
@@ -47,8 +47,6 @@ Zitrus_Heart :: struct {
     graphics: Graphics,
     asset_manager: Asset_Manager,
     input_data: Input_Data,
-
-    camera: Zitrus_Camera,
 
     level_data: struct {
         should_quit: bool,
@@ -93,24 +91,8 @@ init_heart :: proc(size: Vec2Int, levels: []Level, action_map: map[int]Input_Key
 
     heart.meta.exe_path = exe_path
 
-    if !init_renderer(heart.meta.exe_path, size) {
-        fmt.printfln("ERROR: Cannot init renderer - exiting...")
-        os.exit(-1)
-    }
-
-    position: Vec3 = {0, 0, 1}
-    target: Vec3 = {0, 0, 0}
-    direction: Vec3 = (target - position)
-    right: Vec3 = la.normalize(la.cross(Vec3 {0, 1, 0}, direction))
-    up: Vec3 = la.cross(direction, right)
-
-    heart.camera = {
-        position = position,
-        direction = direction,
-        cameraRight = right,
-        cameraUp = up,
-        close_up = 1
-    }
+    init_renderer(size)
+    init_camera()
 
     init_asset_manager(heart.meta.exe_path)
     configurate_input(action_map, callback_groups_number)
@@ -124,15 +106,6 @@ init_heart :: proc(size: Vec2Int, levels: []Level, action_map: map[int]Input_Key
     heart.level_data.levels = levels
 }
 
-get_heart :: #force_inline proc() -> ^Zitrus_Heart {
-    return &heart
-}
-
-start_game_loop :: proc() {
-    heart.level_data.levels[0].start()
-    for !update_heart() {}
-}
-
 update_heart :: proc() -> bool {
     // Update internal data
     now := time.now()
@@ -141,15 +114,9 @@ update_heart :: proc() -> bool {
     total_time += delta_time
     heart.meta.previous_frame = now
 
-    // Check for events
-    event: sdl.Event
-    for sdl.PollEvent(&event){
-        if event.type == .QUIT {
-            heart.level_data.should_quit = true
-        }
-        update_input_event(event)
-    }
-    update_if_held()
+    heart.level_data.should_quit = rl.WindowShouldClose()
+
+    update_input()
 
     lvl := &heart.level_data
     lvl.levels[lvl.current_level].update()
@@ -211,6 +178,7 @@ destroy_heart :: proc() {
     destroy_input()
     destroy_graphics()
     destroy_asset_manager()
+    destroy_renderer()
 
     delete(heart.free_entities)
     delete(heart.component_to_bit)
@@ -224,8 +192,15 @@ destroy_heart :: proc() {
         free(v)
     }
     delete_map(heart.cache)
+}
 
-    destroy_renderer(&heart.renderer)
+get_heart :: #force_inline proc() -> ^Zitrus_Heart {
+    return &heart
+}
+
+start_game_loop :: proc() {
+    heart.level_data.levels[0].start()
+    for !update_heart() {}
 }
 
 cache_add :: proc(item: $T) {
@@ -290,8 +265,9 @@ clear_ecs :: proc() {
 
 Entity_On_Delete :: proc(Entity_ID)
 Entity_Heart :: struct {
-    position: Vec3,
-    scale: Vec3,
+    position: Vec2,
+
+    scale: Vec2,
     rotation: quaternion128,
 
     on_delete: Entity_On_Delete,
@@ -300,18 +276,22 @@ Entity_Heart :: struct {
 Entity_Alive :: struct {}
 Entity_Dying :: struct {}
 
-create_entity :: proc(pos: Vec3 = {0,0,0}, on_delete: Entity_On_Delete = nil) -> (index: Entity_ID) {
+// The bigger the depth, the further away it will be from the screen
+// Depth range = <0 ; RENDERING_DEPTH)
+create_entity :: proc(pos: Vec2 = {0,0}, on_delete: Entity_On_Delete = nil) -> (index: Entity_ID) {
     index = heart.next_id
     heart.next_id += 1;
     heart.entity_masks.set(&heart.entity_masks, index, &Component_Mask {})
 
-    set_component(index, Entity_Heart{
+    entity_heart := set_component(index, Entity_Heart{
         position = pos,
-        scale = {1,1,1},
+        // depth = depth,
+        scale = {1,1},
         rotation = 1,
 
         on_delete = on_delete
     })
+
     set_component(index, Entity_Alive{})
     return
 }

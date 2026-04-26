@@ -1,32 +1,27 @@
 package zitrus
 
-Zitrus_Camera :: struct {
-    position: Vec3,
-    direction: Vec3,
-    cameraRight: Vec3,
-    cameraUp: Vec3,
+import rl "vendor:raylib"
 
-    close_up: f32
-}
-
-camera_set_depth :: proc(depth: f32) {
-    h := get_heart()
-    camera := &h.camera
-
-    camera.position.z = depth
+init_camera :: proc() {
+    r := &heart.renderer
+    r.camera.zoom = 1.0 
+    r.camera.target = {0, 0}
+    r.camera.offset = { f32(rl.GetScreenWidth()) / 2.0, f32(rl.GetScreenHeight()) / 2.0 }
+    r.camera.rotation = 0.0
 }
 
 camera_set_pos :: proc(pos: Vec2) {
     h := get_heart()
-    camera := &h.camera
+    camera := &h.renderer.camera
 
-    camera.position.x = pos.x
-    camera.position.y = pos.y
+    camera.target = pos
 }
 
-camera_move :: proc(move_by: Vec2) {
+camera_move :: proc(move_by: Vec2) -> Vec2 {
     h := get_heart()
-    camera := &h.camera
+    camera := &h.renderer.camera
 
-    camera.position += {move_by.x, move_by.y, 0}
+    camera.target += move_by
+
+    return camera.target
 }

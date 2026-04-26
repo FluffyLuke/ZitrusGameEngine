@@ -10,6 +10,8 @@ import "core:encoding/json"
 
 import z "../"
 
+// Add an offset between each layer
+LAYER_OFFSET :: 5
 
 Entity_Def :: struct {
     name: string,
@@ -27,6 +29,7 @@ Area :: struct {
 }
 
 Layer_IntGrid :: struct {
+    depth: uint,
     tileset_asset_path: string,
     auto_tiles: []Tile,
 }
@@ -82,6 +85,8 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
         int_grid_layers := make([dynamic]Layer_IntGrid, allocator = context.temp_allocator)
         entities := make([dynamic]Entity_Def, allocator = context.temp_allocator)
 
+        // Depth is assigned to intgrid layers and used layer for rendering
+        layer_depth: uint = 0
         for layer in layers {
             layer_obj := layer.(json.Object)
             layer_id := layer_obj["__identifier"].(json.String)
@@ -101,8 +106,16 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                     defer delete(world_dir)
 
                     layer_data := Layer_IntGrid {
+                        depth = layer_depth,
                         tileset_asset_path = str.concatenate({world_dir, "/", layer_obj["__tilesetRelPath"].(json.String)}),
                         auto_tiles = make([]Tile, len(tiles_array))
+                    }
+
+                    layer_depth += LAYER_OFFSET
+                    if layer_depth > z.RENDERING_DEPTH {
+                        fmt.printfln("WARNING: Layer depth is too great for rendering depth. Next layer will use max depth possible ...")
+                        fmt.printfln("WARNING: ... this can lead to tiles overriding each other")
+                        layer_depth = z.RENDERING_DEPTH
                     }
 
                     for tile, i_tile in tiles_array {

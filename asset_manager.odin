@@ -4,34 +4,30 @@ import "core:os"
 import "core:fmt"
 import "core:encoding/json"
 
-import "core:image/png"
-import img "core:image"
-
 import str "core:strings"
 
-import gl "vendor:OpenGL"
+import rl "vendor:raylib"
 
 Asset_Manager :: struct {
-    exe_path: String_Ref,
     image_assets: map[Image_Resource_ID]Image_Asset,
     image_assets_pesist: map[Image_Resource_ID]Image_Asset,
 }
 
 init_asset_manager :: proc(exe_path: String_Ref) {
-    h := get_heart()
+    am := &heart.asset_manager
 
-    am := &h.asset_manager
-    am.exe_path = exe_path
+    image_assets := make(map[Image_Resource_ID]Image_Asset)
+    image_assets_pesist := make(map[Image_Resource_ID]Image_Asset)
 }
 
 get_texture :: proc(id: Image_Resource_ID) -> (Image_Asset, bool) {
-    h := get_heart()
+    am := &heart.asset_manager
 
-    image_asset, ok := h.asset_manager.image_assets[id]
+    image_asset, ok := am.image_assets[id]
 
     if ok do return image_asset, true
 
-    image_asset, ok = h.asset_manager.image_assets_pesist[id]
+    image_asset, ok = am.image_assets_pesist[id]
 
     if !ok do fmt.printfln("ERROR: cannot find texure in asset manager of id: %v", id)
 
@@ -41,12 +37,11 @@ get_texture :: proc(id: Image_Resource_ID) -> (Image_Asset, bool) {
 load_texture :: proc(relative_path: string, persist: bool = false) -> (Image_Resource_ID, bool) {
     defer free_all(context.temp_allocator)
 
-    h := get_heart()
-    am := &h.asset_manager
+    am := &heart.asset_manager
 
     fmt.printfln("INFO: Loading texture '%v'", relative_path)
     
-    path := str.concatenate({am.exe_path, ASSET_ROOT, relative_path}, context.temp_allocator)
+    path := str.concatenate({heart.meta.exe_path, ASSET_ROOT, relative_path}, context.temp_allocator)
     // path_meta := str.concatenate({path, ".meta"}, context.temp_allocator)
 
     // metadata, ok_file := os.read_entire_file_from_path(path_meta, context.temp_allocator)
@@ -72,15 +67,18 @@ load_texture :: proc(relative_path: string, persist: bool = false) -> (Image_Res
     asset: Image_Asset
 
     // TODO: Bring back meta files in the future
-    asset_id := Image_Resource_ID(str.clone(relative_path))
     // asset_id := Image_Resource_ID(root["id"].(json.String))
-    _, asset_found := am.image_assets[asset_id]
-    _, asset_found_persist := am.image_assets_pesist[asset_id]
+
+    _, asset_found := am.image_assets[auto_cast relative_path]
+    _, asset_found_persist := am.image_assets_pesist[auto_cast relative_path]
 
     if asset_found || asset_found_persist {
-        fmt.printfln("ERROR: cannot load file '%s' of id '%s', since this id is already used", relative_path, asset_id)
+        fmt.printfln("ERROR: cannot load file '%s' of id '%s', since this id is already used", relative_path, relative_path)
         return "", false
     }
+
+    asset_id := Image_Resource_ID(str.clone(relative_path))
+    asset.asset_id = asset_id
 
     // asset_meta: Image_Asset_Metadata_Single
     // error := json.unmarshal(metadata, &asset_meta, allocator = context.temp_allocator)
@@ -89,8 +87,6 @@ load_texture :: proc(relative_path: string, persist: bool = false) -> (Image_Res
     //     return "", false
     // }
     //asset.id = Image_Resource_ID(str.clone(asset_meta.id))
-
-    asset.asset_id = asset_id
 
     // switch root["type"].(json.String) {
     //     case "single": {
@@ -121,46 +117,18 @@ load_texture :: proc(relative_path: string, persist: bool = false) -> (Image_Res
     // }
 
     // Load proper image
-    texture, err := img.load_from_file(path, {})
-    defer img.destroy(texture)
+    path_c := str.clone_to_cstring(path, context.temp_allocator)
+    texture := rl.LoadTexture(path_c)
 
-    if err != nil {
-        fmt.printfln("ERROR: cannot READ texture file '%s': %s ... ", relative_path, err)
+    if texture.id <= 0 {
+        fmt.printfln("ERROR: cannot READ texture file '%s' ", relative_path)
         fmt.printfln("ERROR: ... absolute path to file: '%s'", path)
         delete_string(string(asset.asset_id))
         return "", false
     }
+    asset.texture = texture
 
-    asset.dimensions = {auto_cast texture.width, auto_cast texture.height}
-
-    gl.GenTextures(1, &asset.gl_id)
-    gl.BindTexture(gl.TEXTURE_2D, asset.gl_id)
-
-    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT)
-    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT)
-    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-
-    format: u32 = gl.RGB
-    if texture.channels == 4 {
-        format = gl.RGBA
-    }
-
-    gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1)
-
-    gl.TexImage2D(
-        gl.TEXTURE_2D,
-        0, i32(format),
-        i32(texture.width),
-        i32(texture.height),
-        0,
-        format,
-        gl.UNSIGNED_BYTE,
-        raw_data(texture.pixels.buf)
-    
-    )
-    gl.GenerateMipmap(gl.TEXTURE_2D)
-
+    // Clone this id for map. Now map and value have their own respected strings
     id_cloned := Image_Resource_ID(str.clone(string(asset_id)))
     
     if persist do am.image_assets_pesist[id_cloned] = asset
@@ -179,17 +147,17 @@ asset_manager_unload_textures :: proc(also_persist: bool) {
         fmt.printfln("INFO: deleting texture: %s", image.asset_id)
         delete_string(string(k))
         delete_string(string(image.asset_id))
-        gl.DeleteTextures(1, &image.gl_id)
+        rl.UnloadTexture(image)
     }
     clear(&am.image_assets)
 
 
     if also_persist {
         for k, &image in am.image_assets_pesist {
-            fmt.printfln("INFO: deleting texture: %s", image.asset_id)
+            fmt.printfln("INFO: deleting persisted texture: %s", image.asset_id)
             delete_string(string(k))
             delete_string(string(image.asset_id))
-            gl.DeleteTextures(1, &image.gl_id)
+            rl.UnloadTexture(image)
         }
         clear(&am.image_assets_pesist)
     }

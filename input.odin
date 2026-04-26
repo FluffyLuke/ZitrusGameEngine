@@ -4,8 +4,7 @@ import "libs:zitrus"
 import "core:fmt"
 import "core:mem"
 
-import sdl "vendor:sdl3"
-
+import rl "vendor:raylib"
 
 Action_ID :: int
 Callback_Group :: int
@@ -38,69 +37,69 @@ Input_Key :: enum {
 }
 
 @(private="file")
-INPUT_TO_SDL := [Input_Key]sdl.Keycode {
+INPUT_TO_RAYLIB := [Input_Key]rl.KeyboardKey {
     // Letters
-    .A = sdl.K_A, .B = sdl.K_B, .C = sdl.K_C, .D = sdl.K_D, .E = sdl.K_E,
-    .F = sdl.K_F, .G = sdl.K_G, .H = sdl.K_H, .I = sdl.K_I, .J = sdl.K_J,
-    .K = sdl.K_K, .L = sdl.K_L, .M = sdl.K_M, .N = sdl.K_N, .O = sdl.K_O,
-    .P = sdl.K_P, .Q = sdl.K_Q, .R = sdl.K_R, .S = sdl.K_S, .T = sdl.K_T,
-    .U = sdl.K_U, .V = sdl.K_V, .W = sdl.K_W, .X = sdl.K_X, .Y = sdl.K_Y, .Z = sdl.K_Z,
+    .A = .A, .B = .B, .C = .C, .D = .D, .E = .E,
+    .F = .F, .G = .G, .H = .H, .I = .I, .J = .J,
+    .K = .K, .L = .L, .M = .M, .N = .N, .O = .O,
+    .P = .P, .Q = .Q, .R = .R, .S = .S, .T = .T,
+    .U = .U, .V = .V, .W = .W, .X = .X, .Y = .Y, .Z = .Z,
 
     // Numbers
-    .Num0 = sdl.K_0, .Num1 = sdl.K_1, .Num2 = sdl.K_2, .Num3 = sdl.K_3, .Num4 = sdl.K_4,
-    .Num5 = sdl.K_5, .Num6 = sdl.K_6, .Num7 = sdl.K_7, .Num8 = sdl.K_8, .Num9 = sdl.K_9,
+    .Num0 = .ZERO, .Num1 = .ONE, .Num2 = .TWO, .Num3 = .THREE, .Num4 = .FOUR,
+    .Num5 = .FIVE, .Num6 = .SIX, .Num7 = .SEVEN, .Num8 = .EIGHT, .Num9 = .NINE,
 
     // Function Keys
-    .F1 = sdl.K_F1, .F2 = sdl.K_F2, .F3 = sdl.K_F3, .F4 = sdl.K_F4, 
-    .F5 = sdl.K_F5, .F6 = sdl.K_F6, .F7 = sdl.K_F7, .F8 = sdl.K_F8,
-    .F9 = sdl.K_F9, .F10 = sdl.K_F10, .F11 = sdl.K_F11, .F12 = sdl.K_F12,
+    .F1 = .F1, .F2 = .F2, .F3 = .F3, .F4 = .F4, 
+    .F5 = .F5, .F6 = .F6, .F7 = .F7, .F8 = .F8,
+    .F9 = .F9, .F10 = .F10, .F11 = .F11, .F12 = .F12,
 
     // Navigation & Controls
-    .Space     = sdl.K_SPACE,
-    .Escape    = sdl.K_ESCAPE,
-    .Enter     = sdl.K_RETURN,
-    .Tab       = sdl.K_TAB,
-    .Backspace = sdl.K_BACKSPACE,
-    .Insert    = sdl.K_INSERT,
-    .Delete    = sdl.K_DELETE,
-    .Right     = sdl.K_RIGHT,
-    .Left      = sdl.K_LEFT,
-    .Down      = sdl.K_DOWN,
-    .Up        = sdl.K_UP,
-    .Page_Up   = sdl.K_PAGEUP,
-    .Page_Down = sdl.K_PAGEDOWN,
-    .Home      = sdl.K_HOME,
-    .End       = sdl.K_END,
+    .Space     = .SPACE,
+    .Escape    = .ESCAPE,
+    .Enter     = .ENTER,
+    .Tab       = .TAB,
+    .Backspace = .BACKSPACE,
+    .Insert    = .INSERT,
+    .Delete    = .DELETE,
+    .Right     = .RIGHT,
+    .Left      = .LEFT,
+    .Down      = .DOWN,
+    .Up        = .UP,
+    .Page_Up   = .PAGE_UP,
+    .Page_Down = .PAGE_DOWN,
+    .Home      = .HOME,
+    .End       = .END,
 
     // Locks and System
-    .Caps_Lock    = sdl.K_CAPSLOCK,
-    .Scroll_Lock  = sdl.K_SCROLLLOCK,
-    .Num_Lock     = sdl.K_NUMLOCKCLEAR,
-    .Print_Screen = sdl.K_PRINTSCREEN,
-    .Pause        = sdl.K_PAUSE,
+    .Caps_Lock    = .CAPS_LOCK,
+    .Scroll_Lock  = .SCROLL_LOCK,
+    .Num_Lock     = .NUM_LOCK,
+    .Print_Screen = .PRINT_SCREEN,
+    .Pause        = .PAUSE,
 
     // Symbols
-    .Grave         = sdl.K_GRAVE,
-    .Minus         = sdl.K_MINUS,
-    .Equals        = sdl.K_EQUALS,
-    .Left_Bracket  = sdl.K_LEFTBRACKET,
-    .Right_Bracket = sdl.K_RIGHTBRACKET,
-    .Backslash     = sdl.K_BACKSLASH,
-    .Semicolon     = sdl.K_SEMICOLON,
-    .Apostrophe    = sdl.K_APOSTROPHE,
-    .Comma         = sdl.K_COMMA,
-    .Period        = sdl.K_PERIOD,
-    .Slash         = sdl.K_SLASH,
+    .Grave         = .GRAVE,
+    .Minus         = .MINUS,
+    .Equals        = .EQUAL,
+    .Left_Bracket  = .LEFT_BRACKET,
+    .Right_Bracket = .RIGHT_BRACKET,
+    .Backslash     = .BACKSLASH,
+    .Semicolon     = .SEMICOLON,
+    .Apostrophe    = .APOSTROPHE,
+    .Comma         = .COMMA,
+    .Period        = .PERIOD,
+    .Slash         = .SLASH,
 
     // Modifiers
-    .L_Shift   = sdl.K_LSHIFT,
-    .R_Shift   = sdl.K_RSHIFT,
-    .L_Control = sdl.K_LCTRL,
-    .R_Control = sdl.K_RCTRL,
-    .L_Alt     = sdl.K_LALT,
-    .R_Alt     = sdl.K_RALT,
-    .L_GUI     = sdl.K_LGUI,
-    .R_GUI     = sdl.K_RGUI,
+    .L_Shift   = .LEFT_SHIFT,
+    .R_Shift   = .RIGHT_SHIFT,
+    .L_Control = .LEFT_CONTROL,
+    .R_Control = .RIGHT_CONTROL,
+    .L_Alt     = .LEFT_ALT,
+    .R_Alt     = .RIGHT_ALT,
+    .L_GUI     = .LEFT_SUPER,
+    .R_GUI     = .RIGHT_SUPER,
 }
 
 Input_Callback :: struct {
@@ -129,7 +128,7 @@ Input_Data :: struct {
     // User must create an enum with list of actions
     // Each action (enum value) will be an index to this array
     action_map: [dynamic]Input_Action,
-    sdl_to_action_map: map[sdl.Keycode][dynamic]Action_ID,
+    rl_to_action_map: map[rl.KeyboardKey][dynamic]Action_ID,
 
     callback_groups: [dynamic][dynamic]Callback_Group_Pair,
 }
@@ -141,17 +140,17 @@ configurate_input :: proc(actions: map[Action_ID]Input_Key, callback_groups_numb
 
     resize(&input.action_map, len(actions))
     for id, key in actions {
-        sdl_key := INPUT_TO_SDL[key]
+        sdl_key := INPUT_TO_RAYLIB[key]
 
         input.action_map[id] = {
             key = key
         }
         
-        if !(sdl_key in input.sdl_to_action_map) {
-            input.sdl_to_action_map[sdl_key] = make([dynamic]Action_ID)
+        if !(sdl_key in input.rl_to_action_map) {
+            input.rl_to_action_map[sdl_key] = make([dynamic]Action_ID)
         }
         
-        list := &input.sdl_to_action_map[sdl_key]
+        list := &input.rl_to_action_map[sdl_key]
         append(list, id)
     }
 
@@ -340,53 +339,29 @@ input_group_enable :: proc(group: Callback_Group, enable: bool) {
 }
 
 @(private)
-update_if_held :: proc() {
+update_input :: proc() {
     h := get_heart()
     input := &h.input_data
 
-    state_ptr := sdl.GetKeyboardState(nil)
-    for key_code, list in input.sdl_to_action_map {
-        scancode := sdl.GetScancodeFromKey(key_code, nil) 
-        is_pressed := state_ptr[scancode]
+    // Do callbacks
+    for &action in input.action_map {
+        raylib_key := INPUT_TO_RAYLIB[action.key]
 
-        for action_id in list {
-            input.action_map[action_id].is_held = is_pressed
-        }
-    }
-}
-
-@(private)
-update_input_event :: proc(event: sdl.Event) {
-    h := get_heart()
-    input := &h.input_data
-    if event.type == .KEY_DOWN {
-        actions, ok := input.sdl_to_action_map[event.key.key]
-        if !ok {
-            return
-        }
-
-        for action_id in actions {
-            current_action := &input.action_map[action_id]
-            for callback in current_action.on_press {
+        if rl.IsKeyPressed(raylib_key) {
+            for callback in action.on_press {
                 if !callback.enabled do continue
                 callback.callback(callback.data)
             }
         }
-    }
 
-    if event.type == .KEY_UP {
-        actions, ok := input.sdl_to_action_map[event.key.key]
-        if !ok {
-            return
-        }
-
-        for action_id in actions {
-            current_action := &input.action_map[action_id]
-            for callback in current_action.on_release {
+        if rl.IsKeyReleased(raylib_key) {
+            for callback in action.on_release {
                 if !callback.enabled do continue
                 callback.callback(callback.data)
             }
         }
+
+        action.is_held = rl.IsKeyDown(raylib_key)
     }
 }
 
@@ -410,10 +385,10 @@ destroy_input :: proc() {
         delete(action.on_release)
     }
     delete(input.action_map)
-    for _, list in input.sdl_to_action_map {
+    for _, list in input.rl_to_action_map {
         delete(list)
     }
-    delete_map(input.sdl_to_action_map)
+    delete_map(input.rl_to_action_map)
 
     for g in input.callback_groups {
         delete(g)
