@@ -45,6 +45,8 @@ Zitrus_Heart :: struct {
 
     renderer: Renderer,
     graphics: Graphics,
+    lights: Light_Data,
+
     asset_manager: Asset_Manager,
     input_data: Input_Data,
 

@@ -3,6 +3,8 @@ package zitrus
 import "core:fmt"
 import "core:math"
 import "core:math/rand"
+import "core:strconv"
+import str "core:strings"
 
 import rl "vendor:raylib"
 
@@ -33,6 +35,13 @@ Rectangle :: struct {
     height: f32 `json:"h"`,
 }
 
+// Component used to mark specific regions, like collider
+Region :: struct {
+    using area: Rectangle,
+
+    color: Vec4, // For debugging purposes
+}
+
 Circle :: struct {
     x: f32      `json:"x"`, 
     y: f32      `json:"y"`,
@@ -51,6 +60,35 @@ get_random_point3 :: proc(circle: Circle) -> Vec3 {
     point: Vec3 = {math.sin(how_much), math.cos(how_much), 0} * circle.radius
 
     return point + Vec3 {circle.x, circle.y, 0}
+}
+
+hex_to_vec3 :: proc(hex_str: string) -> (color: Vec3, ok: bool) {
+    clean_hex := str.trim_prefix(hex_str, "#")
+
+    if len(clean_hex) != 6 {
+        fmt.printfln("ERROR: Invalid hex string length. Expected 6, got %v", len(clean_hex))
+        return {}, false
+    }
+
+    // Parse the string into a single base-16 unsigned integer
+    hex_value, parse_ok := strconv.parse_u64(clean_hex, 16)
+    if !parse_ok {
+        fmt.printfln("ERROR: Could not parse hex string: %s", hex_str)
+        return {}, false
+    }
+
+    // Extract the RGB components using bitwise shifts (0 - 255)
+    r_byte := f32((hex_value >> 16) & 0xFF)
+    g_byte := f32((hex_value >> 8)  & 0xFF)
+    b_byte := f32(hex_value         & 0xFF)
+
+    color = {
+        r_byte,
+        g_byte,
+        b_byte,
+    }
+
+    return color, true
 }
 
 // === Functions for raylib ===

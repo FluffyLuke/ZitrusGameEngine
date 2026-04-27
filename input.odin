@@ -395,3 +395,15 @@ destroy_input :: proc() {
     }
     delete(input.callback_groups)
 }
+
+// === Common functions ===
+
+toggle_debug_callback :: proc(rawptr) {
+    heart.renderer.debug_mode = !heart.renderer.debug_mode
+
+    if heart.renderer.debug_mode {
+        fmt.println("DEBUG: debug mode turned on")
+    } else {
+        fmt.println("DEBUG: debug mode turned off")
+    }
+}

@@ -13,6 +13,8 @@ RENDERING_DEPTH :: 50
 Renderer :: struct {
     depth_buckets: [RENDERING_DEPTH][dynamic]Entity_ID,
 
+    debug_mode: bool,
+
     camera: rl.Camera2D,
     background_color: rl.Color,
 }
@@ -112,8 +114,40 @@ render :: proc() {
             }
         }
 
+        if r.debug_mode {
+            render_debug()
+        }
+
         rl.EndMode2D()
     rl.EndDrawing()
+}
+
+@(private="file")
+render_debug :: proc() {
+    view := view(Region)
+    defer destroy_view(&view)
+
+    for e in view.entities {
+        region, _ := get_component(e, Region)
+
+        // Get unit system scale factor
+        unit_scale_x, unit_scale_y := f32(rl.GetScreenWidth()) / WINDOW_UNIT_WIDTH, f32(rl.GetScreenHeight()) / WINDOW_UNIT_HEIGHT
+
+        dest := rl.Rectangle {
+            x = region.area.x * unit_scale_x,
+            y = region.area.y * unit_scale_y * -1, // RAYLIB has inverted Y axis
+            width = region.area.width * unit_scale_x,
+            height = region.area.height * unit_scale_y,
+        }
+
+        origin := rl.Vector2 {
+            (region.area.width * unit_scale_x) / 2.0,
+            (region.area.height * unit_scale_y) / 2.0,
+        }
+
+        color := region.color
+        rl.DrawRectanglePro(dest, origin, 0, {auto_cast color.x, auto_cast color.y, auto_cast color.z, 255/2})
+    }
 }
 
 set_background_color :: proc(color: Vec4Int) {

@@ -15,7 +15,11 @@ LAYER_OFFSET :: 5
 
 Entity_Def :: struct {
     name: string,
+    color: z.Vec3,
     pos: z.Vec2,
+    width: f32,
+    height: f32,
+    tags: [dynamic]string,
     values_vec2: map[string]z.Vec2,
     values_ints: map[string]i64,
     values_floats: map[string]f64,
@@ -166,15 +170,34 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                         entity_pos.y *= -1
                         entity_pos /= f32(layer_grid_size)
 
-                        fmt.printfln("DEBUG: entity_pos: %v", entity_pos)
+                        width := f32(entity_obj["width"].(json.Float))
+                        height := f32(entity_obj["height"].(json.Float))
+
+                        width /= f32(layer_grid_size)
+                        height /= f32(layer_grid_size)
+
+                        color, ok_color := z.hex_to_vec3(entity_obj["__smartColor"].(json.String))
+                        if !ok_color {
+                            color = z.Vec3 {255, 120, 56}
+                        }
 
                         entity_def := Entity_Def {
                             name = str.clone(entity_obj["__identifier"].(json.String)),
+                            color = color,
                             pos = entity_pos,
+                            width = width,
+                            height = height,
+                            tags = make([dynamic]string),
                             values_floats = make(map[string]f64),
                             values_ints = make(map[string]i64),
                             values_strings = make(map[string]string),
                             values_vec2 = make(map[string]z.Vec2)
+                        }
+
+                        tags_raw := entity_obj["__tags"].(json.Array)
+
+                        for tag in tags_raw {
+                            append(&entity_def.tags, str.clone(tag.(json.String)))
                         }
 
                         fields_array := entity_obj["fieldInstances"].(json.Array)
@@ -249,6 +272,11 @@ delete_ldtk :: proc(ldtk: LDtk_Data) {
                 delete_string(k)
             }
 
+            for tag in entity.tags {
+                delete_string(tag)
+            }
+
+            delete(entity.tags)
             delete_map(entity.values_ints)
             delete_map(entity.values_strings)
             delete_map(entity.values_floats)
