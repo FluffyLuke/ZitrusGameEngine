@@ -41,6 +41,26 @@ init_levels :: proc(levels: map[Level_ID]Level, first_level: Level_ID) {
     heart.level_data.current_level = first_level
 }
 
+set_level_execution :: proc(
+    data: map[Level_ID]Level, 
+    level_id: Level_ID,
+    start: proc(self: ^Level) = proc(self: ^Level) {},
+    update: proc(self: ^Level, delta_time: f64) = proc(self: ^Level, delta_time: f64) {},
+    end: proc(self: ^Level) = proc(self: ^Level) {},
+) -> bool {
+    lvl, ok := &data[level_id]
+    if !ok {
+        fmt.printfln("[ERROR] Cannot find level with id '%v'. Execution functions will not be set.", level_id)
+        return false
+    }
+    
+    lvl.start = start
+    lvl.update = update
+    lvl.end = end
+
+    return true
+}
+
 destroy_levels :: proc() {
     for id, l in heart.level_data.levels {
         delete_string(auto_cast l.label)
@@ -109,6 +129,9 @@ create_entities :: proc(lvl: ^Level) {
     for e in lvl.entities {
         // Create basic entity
         entity_id := create_entity(e.position, e.tags[:])
+        for t in e.tags {
+            set_tag(entity_id, t)
+        }
 
         // Check if it has "_Texture" meta value
         add_texture: if value := get_entity_value(e.values.strings, "_Texture"); value != nil {

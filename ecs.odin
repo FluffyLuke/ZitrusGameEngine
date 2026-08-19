@@ -359,7 +359,8 @@ View :: struct {
 
 view :: proc {
     view_components,
-    view_tags,
+    view_tags_indexes,
+    view_tags_strings,
 }
 
 view_components :: proc(component_types: ..typeid) -> (view: View) {

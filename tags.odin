@@ -26,13 +26,49 @@ init_tags :: proc() {
 destroy_tags :: proc() {
     heart.tags.masks.destroy_set(&heart.tags.masks)
 
+    for i in 0..<heart.tags.next_index {
+        delete_string(heart.tags.registered[i].(string))
+    }
+
     defer delete(heart.tags.groups)
     for _, &v in heart.tags.groups {
         v.destroy_set(&v)
     }
 }
 
-register_tags :: proc(tag_raw: string) -> (saved_index: Tag_Index) {
+set_tag :: proc {
+    set_tag_index,
+    set_tag_string,
+}
+
+set_tag_index :: proc(id: Entity_ID, tag: Tag_Index) -> bool {
+    return set_tag_bitset(id, tag, true)
+}
+
+set_tag_string :: proc(id: Entity_ID, tag_raw: string) -> bool {
+    tag_index := register_tag(tag_raw)
+    return set_tag_index(id, tag_index)
+}
+
+remove_tag :: proc {
+    remove_tag_index,
+    remove_tag_string,
+}
+
+remove_tag_index :: proc(id: Entity_ID, tag: Tag_Index) -> bool {
+    return set_tag_bitset(id, tag, false)
+}
+
+remove_tag_string :: proc(id: Entity_ID, tag_raw: string) -> bool {
+    tag_index := register_tag(tag_raw)
+    return remove_tag_index(id, tag_index)
+}
+
+register_tag :: proc(tag_raw: string) -> (saved_index: Tag_Index) {
+    if index, found := tag_to_index(tag_raw); found {
+        return index
+    }
+
     tags := &heart.tags
 
     if tags.next_index >= MAX_TAGS {
@@ -62,7 +98,24 @@ tag_to_index :: proc(tag_raw: string) -> (Tag_Index, bool) {
     return -1, false
 }
 
-view_tags :: proc(indexes: ..Tag_Index) -> (view: View) {
+view_tags_strings :: proc(tags: ..string) -> (view: View) {
+    t := &heart.tags
+
+    indexes := make([dynamic]Tag_Index, 0, len(tags))
+    defer delete(indexes)
+
+    for tag_str in tags {
+        if idx, ok := tag_to_index(tag_str); ok {
+            append(&indexes, idx)
+        } else {
+            fmt.printfln("[Warning] Tag '%v' does not exist in registry.", tag_str)
+        }
+    }
+
+    return view_tags_indexes(..indexes[:])
+}
+
+view_tags_indexes :: proc(indexes: ..Tag_Index) -> (view: View) {
     tags := &heart.tags
 
     target_mask := Tag_Mask {}
@@ -85,22 +138,24 @@ view_tags :: proc(indexes: ..Tag_Index) -> (view: View) {
     return
 }
 
-set_tag_bitset :: proc(id: Entity_ID, tag_id: Tag_Index, has_it: bool) -> bool {
+set_tag_bitset :: proc(entity_id: Entity_ID, tag_id: Tag_Index, has_it: bool) -> bool {
     tags := &heart.tags
     // Get entity's bit set and remove entity from current group
-    bitset_ptr := (^Tag_Mask)(tags.masks.get(&tags.masks, id))
+    bitset_ptr := (^Tag_Mask)(tags.masks.get(&tags.masks, entity_id))
+    bitset: Tag_Mask
     if bitset_ptr != nil {
-        bitset := bitset_ptr^
+        bitset = bitset_ptr^
         group, ok := &tags.groups[bitset]
         if ok {
-            group.delete(group, id)
+            group.delete(group, entity_id)
             if group.number_of_items == 0 {
                 group.destroy_set(group)
                 delete_key(&tags.groups, bitset)
             }
         }
+    } else {
+        bitset = {auto_cast tag_id}
     }
-    bitset := bitset_ptr^
 
     // Treat tag as bit and update bitset
     if has_it {
@@ -109,7 +164,7 @@ set_tag_bitset :: proc(id: Entity_ID, tag_id: Tag_Index, has_it: bool) -> bool {
         bitset -= {auto_cast tag_id}
     }
     
-    // Get entity group (and create it if not existing)
+    // Get tag group (and create it if not existing)
     group, ok := &tags.groups[bitset]
     if !ok {
         tags.groups[bitset] = new_sparse_set(Entity_ID, cleanup = Component_Cleanup_Default)
@@ -117,9 +172,9 @@ set_tag_bitset :: proc(id: Entity_ID, tag_id: Tag_Index, has_it: bool) -> bool {
     }
 
     // Move entity to new bitset
-    id_copy := id
-    group.set(group, id, &id_copy)
-    tags.masks.set(&tags.masks, id, &bitset)
+    id_copy := entity_id
+    group.set(group, entity_id, &id_copy)
+    tags.masks.set(&tags.masks, entity_id, &bitset)
 
     return true
 }
