@@ -1,69 +1,79 @@
 package zitrus
 
-import "core:fmt"
+// import "core:fmt"
 
-import rl "vendor:raylib"
+// import rl "vendor:raylib"
 
-MAX_SHADOWS :: 16
-MAX_OBSTRUCTIONS :: 256
+// MAX_SHADOWS :: 16
+// MAX_OBSTRUCTIONS :: 256
 
-Shadow_Geometry :: struct {
-    // 4 Edges of the shadow
-    vertices: [4]Vec2
-}
+// Shadow_Geometry :: struct {
+//     // 4 Edges of the shadow
+//     vertices: [4]Vec2
+// }
 
-Light_Source :: struct {
-    shadow_count: uint,
-    // obstructions_in_radius: [MAX_OBSTRUCTIONS]Rectangle,
-    shadows: [MAX_SHADOWS]Shadow_Geometry,
-}
+// Light_Source :: struct {
+//     radius: f32,
 
-Light_Data :: struct {
-    mask: rl.RenderTexture2D,
-    obstructions: [dynamic]Rectangle
-}
+//     dirty: bool,
 
-create_light_data :: proc() {
-    data := &heart.lights
+//     shadow_count: uint,
+//     shadows: [MAX_SHADOWS]Shadow_Geometry,
+// }
 
-    // TODO: Make this resizable with screen size
-    data.mask = rl.LoadRenderTexture(rl.GetScreenWidth(), rl.GetScreenHeight())
+// Light_Data :: struct {
+//     mask: rl.RenderTexture2D,
+//     obstructions: [dynamic]Rectangle
+// }
 
-    data.obstructions = make([dynamic]Rectangle)
-}
+// create_light_data :: proc() {
+//     data := &heart.lights
 
-destroy_light_data :: proc() {
-    data := &heart.lights
+//     // TODO: Make this resizable with screen size
+//     data.mask = rl.LoadRenderTexture(rl.GetScreenWidth(), rl.GetScreenHeight())
 
-    rl.UnloadRenderTexture(data.mask)
-    delete(data.obstructions)
-}
+//     data.obstructions = make([dynamic]Rectangle)
+// }
 
-Light_Obstruction_Tag :: struct {}
+// destroy_light_data :: proc() {
+//     data := &heart.lights
 
-create_light_obstruction :: proc(pos: Rectangle, color: Vec4) {
-    id := create_entity({0,0}) // Position of the entity is not used
+//     rl.UnloadRenderTexture(data.mask)
+//     delete(data.obstructions)
+// }
 
-    set_component(id, Light_Obstruction_Tag {})
-    set_component(id, Region {
-        area = pos,
-        color = color,
-    })
-}
+// Light_Obstruction_Tag :: struct {}
 
-create_light :: proc(pos: Vec2) {
-    id := create_entity(pos, on_delete = proc(id: Entity_ID) {
-        mesh, _ := get_component(id, Mesh_2D)
-        delete_mesh(mesh)
-    })
+// create_light_obstruction :: proc(pos: Rectangle, color: Vec4) {
+//     id := create_entity({0,0}) // Position of the entity is not used
 
-    set_component(id, Light_Source {})
+//     set_component(id, Light_Obstruction_Tag {})
+//     set_component(id, Region {
+//         area = pos,
+//         color = color,
+//     })
+// }
 
-    mesh := create_mesh({1.5,1.5}, 0)
-    mesh_set_texture(&mesh, "placeholder.png")
+// create_light :: proc(pos: Vec2) {
+//     id := create_entity(pos, on_delete = proc(id: Entity_ID) {
+//         mesh, _ := get_component(id, Mesh_2D)
+//         destroy_mesh(mesh)
+//     })
 
-    set_component(id, mesh)
-}
+//     set_component(id, Light_Source {})
 
-update_light :: proc(source: ^Light_Source)
-draw_light_mask :: proc(source: ^Light_Source)
+//     mesh := create_mesh({1.5,1.5}, 0)
+//     mesh_set_texture(&mesh, "placeholder.png")
+
+//     set_component(id, mesh)
+// }
+
+// update_light :: proc(source: ^Light_Source)
+// draw_light_mask :: proc(source: ^Light_Source) {
+//     l := &heart.lights
+//     r := &heart.renderer
+
+//     rl.BeginTextureMode(l.mask)
+
+//     rl.EndTextureMode()
+// }

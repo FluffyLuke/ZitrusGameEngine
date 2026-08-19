@@ -4,18 +4,18 @@ import "core:fmt"
 
 import z "../"
 
-Area_Index :: int
+Level_Index :: int
 Bad_Area_Index :: -1
-get_area_index :: proc(ldtk: ^LDtk_Data, name: string) -> Area_Index {
-    for &a, i in ldtk.areas {
+get_area_index :: proc(ldtk: ^LDtk_Data, name: string) -> Level_Index {
+    for &a, i in ldtk.levels {
         if a.name != name do continue
         return i
     }
     return Bad_Area_Index
 }
 
-get_entity :: proc(ldtk: ^LDtk_Data, area: Area_Index, name: string) -> (Entity_Def, bool) {
-    for entity in ldtk.areas[area].entities {
+get_entity :: proc(ldtk: ^LDtk_Data, level: Level_Index, name: string) -> (Entity_Def, bool) {
+    for entity in ldtk.levels[level].entities {
         if entity.name == name do return entity, true
     }
     return {}, false

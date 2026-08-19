@@ -26,7 +26,7 @@ Entity_Def :: struct {
     values_strings: map[string]string,
 }
 
-Area :: struct {
+Level :: struct {
     name: string,
     int_grids: []Layer_IntGrid,
     entities: []Entity_Def
@@ -39,7 +39,7 @@ Layer_IntGrid :: struct {
 }
 
 LDtk_Data :: struct {
-    areas: []Area,
+    levels: []Level,
 }
 
 Tile :: struct {
@@ -50,41 +50,80 @@ Tile :: struct {
     alpha: f32,
 }
 
-load_world :: proc(relative_path: string) -> (LDtk_Data, bool) {
-    path := str.concatenate({z.heart.meta.exe_path, z.ASSET_ROOT, relative_path}, context.temp_allocator)
+load_world :: proc(relative_path: string) -> (map[z.Level_ID]z.Level, bool) {
+    defer free_all(context.temp_allocator)
+
+    exe_path, os_err := os.get_executable_directory(context.temp_allocator)
+    if os_err != os.ERROR_NONE {
+        fmt.printfln("[ERROR] Cannot load executable's path: %s", os_err)
+        os.exit(-1)
+    }
+
+    path := str.concatenate({exe_path, z.ASSET_ROOT, relative_path}, context.temp_allocator)
     data_raw, ok_file := os.read_entire_file_from_path(path, context.temp_allocator)
     
     if ok_file != os.ERROR_NONE {
-        fmt.printfln("ERROR: Cannot load world '%v' ...", relative_path)
-        fmt.printfln("ERROR: ... full path: '%v'", path)
+        fmt.printfln("[ERROR] Cannot load world '%v' ...", relative_path)
+        fmt.printfln("[ERROR] ... full path: '%v'", path)
         return {}, false
     }
 
     root, err := json.parse(data_raw, allocator = context.temp_allocator)
 
     if err != nil {
-        fmt.printfln("ERROR: Cannot parse world json: %v", err)
+        fmt.printfln("[ERROR] Cannot parse world json: %v", err)
         return {}, false
     }
 
     data := parse_world_json(root, relative_path)
+    defer delete_ldtk(&data)
+    
+    parsed_levels := make(map[z.Level_ID]z.Level)
+    for l in data.levels {
+        level_parsed: z.Level
+        level_parsed.label = auto_cast str.clone(l.name)
 
-    free_all(context.temp_allocator)
-    return data, true
+        // Set default (empty) functions
+        level_parsed.start = proc(^z.Level) {}
+        level_parsed.update = proc(^z.Level, f64) {}
+        level_parsed.end = proc(^z.Level) {}
+
+        for e in l.entities {
+            entity_parsed := z.Entity_Default_Properties {
+                position = {e.pos.x, e.pos.y, 0},
+                scale = 1,
+                // rotation
+            }
+
+            for t in e.tags do append(&entity_parsed.tags, str.clone(t))
+            for k, v in e.values_vec2 do entity_parsed.values.vec2[str.clone(k)] = v
+            for k, v in e.values_ints do entity_parsed.values.ints[str.clone(k)] = v
+            for k, v in e.values_floats do entity_parsed.values.floats[str.clone(k)] = v
+            for k, v in e.values_strings do entity_parsed.values.strings[str.clone(k)] = str.clone(v)
+
+            append(&level_parsed.entities, entity_parsed)
+        }
+
+        parsed_levels[level_parsed.label] = level_parsed
+    }
+
+    return parsed_levels, true
 }
+
+
 
 parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
     ldtk: LDtk_Data
 
-    areas_json := root.(json.Object)["levels"].(json.Array)
+    levels_json := root.(json.Object)["levels"].(json.Array)
 
-    ldtk.areas = make([]Area, len(areas_json))
-    for area, i_area in areas_json {
-        area_obj := area.(json.Object)
-        current_area := &ldtk.areas[i_area]
+    ldtk.levels = make([]Level, len(levels_json))
+    for level, i_level in levels_json {
+        level_obj := level.(json.Object)
+        current_area := &ldtk.levels[i_level]
 
-        current_area.name = str.clone(area_obj["identifier"].(json.String))
-        layers := area_obj["layerInstances"].(json.Array)
+        current_area.name = str.clone(level_obj["identifier"].(json.String))
+        layers := level_obj["layerInstances"].(json.Array)
 
         int_grid_layers := make([dynamic]Layer_IntGrid, allocator = context.temp_allocator)
         entities := make([dynamic]Entity_Def, allocator = context.temp_allocator)
@@ -118,8 +157,8 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
 
                     layer_depth += LAYER_OFFSET
                     if layer_depth > z.RENDERING_DEPTH {
-                        fmt.printfln("WARNING: Layer depth is too great for rendering depth. Next layer will use max depth possible ...")
-                        fmt.printfln("WARNING: ... this can lead to tiles overriding each other")
+                        fmt.printfln("[WARNING] Layer depth is too great for rendering depth. Next layer will use max depth possible ...")
+                        fmt.printfln("[WARNING] ... this can lead to tiles overriding each other")
                         layer_depth = z.RENDERING_DEPTH
                     }
 
@@ -151,7 +190,7 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                             case 2: layer_data.auto_tiles[i_tile].flip = .Y
                             case 3: layer_data.auto_tiles[i_tile].flip = .XY
                             case: 
-                                fmt.printfln("WARNING: Unknown flip value for tile: '%v'. Setting to .None", flip_value)
+                                fmt.printfln("[WARNING] Unknown flip value for tile: '%v'. Setting to .None", flip_value)
                                 layer_data.auto_tiles[i_tile].flip = .None
                         }
                     }
@@ -226,8 +265,24 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                                     point /= f32(layer_grid_size)
 
                                     entity_def.values_vec2[field_id] = point
+                                // Convert it to Vec2 if possible
+                                case "Array<Float>":
+                                    array_obj := field_obj["__value"].(json.Array)
+                                    if len(array_obj) != 2 {
+                                        fmt.printfln("[Warning] Too many or too few fields in array. Skipping.")
+                                        continue
+                                    }
+                                    x := f32(array_obj[0].(json.Float))
+                                    y := f32(array_obj[0].(json.Float))
+
+                                    size := z.Vec2 {x, y}
+                                    // size += offset
+                                    // size.y *= -1
+                                    // size /= f32(layer_grid_size)
+
+                                    entity_def.values_vec2[field_id] = size
                                 case:
-                                    fmt.printfln("WARNING: Unknown field type '%v'", field_type_str)
+                                    fmt.printfln("[WARNING] Unknown field type '%v'.", field_type_str)
                                     delete_string(field_id)
                                     continue
                             }
@@ -237,7 +292,7 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                 }
 
                 case: {
-                    fmt.printfln("WARNING: Unknown layer of '%v' and id '%v'", layer_type, layer_id)
+                    fmt.printfln("[WARNING] Unknown layer of '%v' and id '%v'", layer_type, layer_id)
                 }
             }
         }
@@ -248,13 +303,13 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
     return ldtk
 }
 
-delete_ldtk :: proc(ldtk: LDtk_Data) {
-    for area in ldtk.areas {
-        for int_grid in area.int_grids {
+delete_ldtk :: proc(ldtk: ^LDtk_Data) {
+    for lvl in ldtk.levels {
+        for int_grid in lvl.int_grids {
             delete_string(int_grid.tileset_asset_path)
             delete(int_grid.auto_tiles)
         }
-        for entity in area.entities {
+        for entity in lvl.entities {
             delete_string(entity.name)
 
             for k, v in entity.values_strings {
@@ -283,11 +338,11 @@ delete_ldtk :: proc(ldtk: LDtk_Data) {
             delete_map(entity.values_vec2)
         }
 
-        delete(area.int_grids)
-        delete(area.entities)
-        delete(area.name)
+        delete(lvl.int_grids)
+        delete(lvl.entities)
+        delete(lvl.name)
     }
-    delete(ldtk.areas)
+    delete(ldtk.levels)
 }
 
 json_to_vec2 :: proc(vec_json: json.Value) -> z.Vec2 {

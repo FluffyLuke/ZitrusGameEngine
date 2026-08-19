@@ -16,6 +16,7 @@ Sparse_Set :: struct {
 
     get: proc(this: rawptr, id: Sparse_Index) -> Item_Pointer,
     set: proc(this: rawptr, id: Sparse_Index, item: Item_Pointer) -> Item_Pointer,
+    cleanup: Component_Cleanup,
     delete: proc(this: rawptr, id: Sparse_Index) -> bool,
     clear: proc(this: rawptr),
 
@@ -31,8 +32,9 @@ Sparse_Set_Data :: struct($T: typeid) {
 
 // Big ass function
 // Creates new sparse set object
-new_sparse_set :: proc($T: typeid, allocator := context.allocator) -> (sparse_set: Sparse_Set) {
+new_sparse_set :: proc($T: typeid, allocator := context.allocator, cleanup: Component_Cleanup) -> (sparse_set: Sparse_Set) {
     sparse_set.type_in_set = T
+    sparse_set.cleanup = cleanup
 
     sparse_set.data = new(Sparse_Set_Data(T), allocator)
     sparse_set.get = proc(this: rawptr, id: Sparse_Index) -> Item_Pointer {
@@ -71,9 +73,15 @@ new_sparse_set :: proc($T: typeid, allocator := context.allocator) -> (sparse_se
         return &data.dense[len(data.dense)-1]
     }
 
-    sparse_set.clear= proc(this: rawptr) {
+    sparse_set.clear = proc(this: rawptr) {
         sparse_set: ^Sparse_Set = (^Sparse_Set)(this)
         data: ^Sparse_Set_Data(T) = (^Sparse_Set_Data(T))(sparse_set.data)
+
+        for c, dense_index in &data.dense {
+            // Run cleanup function for every element to avoid potential leaks
+            id := data.dense_to_entity[dense_index]
+            sparse_set.cleanup(id, &data.dense[dense_index])
+        }
 
         clear(&data.dense)
         clear(&data.dense_to_entity)
@@ -131,9 +139,11 @@ new_sparse_set :: proc($T: typeid, allocator := context.allocator) -> (sparse_se
             return false
         }
         sparse_set.number_of_items -= 1;
+
+        // Run cleanup function for the element about to be deleted
+        sparse_set.cleanup(id, &data.dense[dense_index])
     
         // Change places of last element and element that needs to be deleted
-        // Or simpler - just override deleted element with the last
         data.dense[dense_index] = data.dense[len(data.dense)-1]
         moved_element_index: Sparse_Index = data.dense_to_entity[len(data.dense)-1]
     
@@ -156,6 +166,13 @@ new_sparse_set :: proc($T: typeid, allocator := context.allocator) -> (sparse_se
     sparse_set.destroy_set = proc(this: rawptr) {
         sparse_set: ^Sparse_Set = (^Sparse_Set)(this)
         data: ^Sparse_Set_Data(T) = (^Sparse_Set_Data(T))(sparse_set.data)
+
+        for c, dense_index in &data.dense {
+            // Run cleanup function for every element to avoid potential leaks
+            id := data.dense_to_entity[dense_index]
+            sparse_set.cleanup(id, &data.dense[dense_index])
+        }
+
         delete(data.dense)
         delete(data.dense_to_entity)
         delete(data.sparse)

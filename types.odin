@@ -66,14 +66,14 @@ hex_to_vec3 :: proc(hex_str: string) -> (color: Vec3, ok: bool) {
     clean_hex := str.trim_prefix(hex_str, "#")
 
     if len(clean_hex) != 6 {
-        fmt.printfln("ERROR: Invalid hex string length. Expected 6, got %v", len(clean_hex))
+        fmt.printfln("[ERROR] Invalid hex string length. Expected 6, got %v", len(clean_hex))
         return {}, false
     }
 
     // Parse the string into a single base-16 unsigned integer
     hex_value, parse_ok := strconv.parse_u64(clean_hex, 16)
     if !parse_ok {
-        fmt.printfln("ERROR: Could not parse hex string: %s", hex_str)
+        fmt.printfln("[ERROR] Could not parse hex string: %s", hex_str)
         return {}, false
     }
 

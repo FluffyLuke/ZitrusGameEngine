@@ -173,7 +173,7 @@ add_on_press_callback :: proc(action_id: Action_ID, callback_id: Callback_ID, gr
 
     for c in current_action.on_press {
         if c.id == callback_id {
-            fmt.printfln("WARNING: Cannot add callback '%v' - already exist", callback_id)
+            fmt.printfln("[WARNING] Cannot add callback '%v' - already exist", callback_id)
             return
         }
     }
@@ -212,7 +212,7 @@ remove_on_press_callback :: proc(action_id: Action_ID, callback_id: Callback_ID)
     }
 
     if index_to_remove == -1 {
-        fmt.printfln("WARNING: Cannot remove callback '%v' - does not exist", callback_id)
+        fmt.printfln("[WARNING] Cannot remove callback '%v' - does not exist", callback_id)
         return
     }
 
@@ -235,7 +235,7 @@ remove_on_press_callback :: proc(action_id: Action_ID, callback_id: Callback_ID)
     }
 
     if index_group_to_remove == -1 {
-        fmt.printfln("WARNING: Cannot remove callback '%v' from group '%v' - not in group", callback_id, group_id)
+        fmt.printfln("[WARNING] Cannot remove callback '%v' from group '%v' - not in group", callback_id, group_id)
         return
     }
 
@@ -250,7 +250,7 @@ add_on_release_callback :: proc(action_id: Action_ID, callback_id: Callback_ID, 
 
     for c in current_action.on_release {
         if c.id == callback_id {
-            fmt.printfln("WARNING: Cannot add callback '%v' - already exist", c.id)
+            fmt.printfln("[WARNING] Cannot add callback '%v' - already exist", c.id)
             return
         }
     }
@@ -289,7 +289,7 @@ remove_on_release_callback :: proc(action_id: Action_ID, callback_id: Callback_I
     }
 
     if index_to_remove == -1 {
-        fmt.printfln("WARNING: Cannot remove callback '%v' - does not exist", callback_id)
+        fmt.printfln("[WARNING] Cannot remove callback '%v' - does not exist", callback_id)
         return
     }
 
@@ -312,7 +312,7 @@ remove_on_release_callback :: proc(action_id: Action_ID, callback_id: Callback_I
     }
 
     if index_group_to_remove == -1 {
-        fmt.printfln("WARNING: Cannot remove callback '%v' from group '%v' - not in group", callback_id, group_id)
+        fmt.printfln("[WARNING] Cannot remove callback '%v' from group '%v' - not in group", callback_id, group_id)
         return
     }
 

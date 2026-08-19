@@ -95,7 +95,7 @@ package zitrus
 //     // Create screen mesh
 //     screen_mesh, ok := create_screen_mesh({auto_cast window_size.x, auto_cast window_size.y})
 //     if !ok {
-//         fmt.printfln("ERROR: Cannot screen mesh")
+//         fmt.printfln("[ERROR] Cannot screen mesh")
 //         return false
 //     }
 
@@ -105,27 +105,27 @@ package zitrus
 //     // Set the standard alpha blending equation (multiply what's left by the backgrounds color)
 //     gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 
-//     fmt.printfln("INFO: Successfully initialized renderer", )
+//     fmt.printfln("[INFO] Successfully initialized renderer", )
 
 //     return true
 // }
 // @(private)
 // init_sdl :: proc(r: ^Renderer) -> bool {
 //     if !sdl.Init({.VIDEO, .AUDIO}) {
-//         fmt.println("ERROR: Cannot init SDL: ", sdl.GetError())
+//         fmt.println("[ERROR] Cannot init SDL: ", sdl.GetError())
 //         return false
 //     }
 
 //     r.window = sdl.CreateWindow("Game", r.window_size.x, r.window_size.y, {.OPENGL})
 //     if r.window == nil {
-//         fmt.println("ERROR: Cannot init window: ", sdl.GetError())
+//         fmt.println("[ERROR] Cannot init window: ", sdl.GetError())
 //         sdl.Quit();
 //         return false
 //     }
 
 //     r.ctx = sdl.GL_CreateContext(r.window)
 //     if r.ctx == nil {
-//         fmt.println("ERROR: Cannot init renderer: ", sdl.GetError())
+//         fmt.println("[ERROR] Cannot init renderer: ", sdl.GetError())
 //         sdl.DestroyWindow(r.window)
 //         sdl.Quit()
 //         return false
@@ -145,7 +145,7 @@ package zitrus
 //     path := str.concatenate({r.exe_path, SHADERS_ROOT, shader_path}, context.temp_allocator)
 //     shader_raw, ok_file := os.read_entire_file_from_path(path, context.temp_allocator)
 //     if ok_file != os.ERROR_NONE {
-//         fmt.printfln("ERROR: cannot FIND shader - %s", shader_path)
+//         fmt.printfln("[ERROR] cannot FIND shader - %s", shader_path)
 //         return gl.INVALID_VALUE, false
 //     }
     
@@ -163,12 +163,12 @@ package zitrus
 //     if compile_status == gl.INVALID_VALUE || compile_status == gl.INVALID_OPERATION || compile_status != 1 {
 //         info_log: [1024 * 8]u8
 //         gl.GetShaderInfoLog(shader_id, len(info_log), nil, &info_log[0])
-//         fmt.printfln("ERROR: cannot COMPILE shader '%s':", shader_path)
+//         fmt.printfln("[ERROR] cannot COMPILE shader '%s':", shader_path)
 //         fmt.printfln("%s", info_log)
 //         return gl.INVALID_VALUE, false
 //     }
 
-//     fmt.printfln("INFO: Shader '%s' compiled properly", shader_path)
+//     fmt.printfln("[INFO] Shader '%s' compiled properly", shader_path)
 
 //     return shader_id, true
 // }
@@ -189,11 +189,11 @@ package zitrus
 //     if success != 1 {
 //         info_log: [512]u8
 //         gl.GetProgramInfoLog(shader_program, len(info_log), nil, &info_log[0])
-//         fmt.printfln("ERROR: Cannot link program - %s", info_log)
+//         fmt.printfln("[ERROR] Cannot link program - %s", info_log)
 //         return 0, false
 //     }
 
-//     fmt.println("INFO: Program linked properly")
+//     fmt.println("[INFO] Program linked properly")
 //     return shader_program, true
 
 // }
@@ -278,7 +278,7 @@ package zitrus
 //     gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, screen.render_buffer)
 
 //     if gl.CheckFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE {
-//         fmt.println("ERROR: Framebuffer is not complete")
+//         fmt.println("[ERROR] Framebuffer is not complete")
 //         gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
 //         return {}, false
 //     }
@@ -300,13 +300,13 @@ package zitrus
 // set_ambient_strength :: proc(s: f32) {
 //     r := &heart.renderer
 //     if s < 0 {
-//         fmt.printfln("WARNING: cannot set global ambient strength to value below 0. Setting to 0")
+//         fmt.printfln("[WARNING] cannot set global ambient strength to value below 0. Setting to 0")
 //         r.global_ambient_stregth = 0
 //         return
 //     }
 
 //     if s > 1 {
-//         fmt.printfln("WARNING: cannot set global ambient strength to value over 1. Setting to 1")
+//         fmt.printfln("[WARNING] cannot set global ambient strength to value over 1. Setting to 1")
 //         r.global_ambient_stregth = 1
 //         return
 //     }
@@ -316,7 +316,7 @@ package zitrus
 // set_ambient_color :: proc(color: Vec3) {
 //     r := &heart.renderer
 //     if color.x > 1 || color.x < 0 || color.y > 1 || color.y < 0 || color.z > 1 || color.z < 0 {
-//         fmt.printfln("WARNING: wrong ambient color: %v ...", color)
+//         fmt.printfln("[WARNING] wrong ambient color: %v ...", color)
 //     }
 //     r.global_ambient_color = color
 // }

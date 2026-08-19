@@ -50,6 +50,7 @@ next_mesh_id: Mesh_ID = 0
 
 Image_Source :: distinct Rectangle
 
+// TODO: remove "depth" and simply use z coordinate
 Mesh_2D :: struct {
     id: Mesh_ID,
     depth: uint,
@@ -67,10 +68,14 @@ Graphics :: struct {
 
 create_graphics :: proc() {
     heart.graphics.meshes = make(map[Mesh_ID]Mesh_2D)
+
+    register_component(Mesh_2D, proc(id: Entity_ID, mesh: ^Mesh_2D) {
+        destroy_mesh(mesh)
+    })
 }
 
 destroy_graphics :: proc() {
-    delete_all_meshes()
+    destroy_all_meshes()
     delete(heart.graphics.meshes)
 }
 
@@ -84,7 +89,7 @@ create_mesh :: proc(
 
     real_depth := depth
     if depth >= RENDERING_DEPTH {
-        fmt.printfln("WARNING: Depth '%v' is too great. Setting it to biggest value possible - %v", depth, RENDERING_DEPTH - 1)
+        fmt.printfln("[WARNING] Depth '%v' is too great. Setting it to biggest value possible - %v", depth, RENDERING_DEPTH - 1)
         real_depth = RENDERING_DEPTH - 1
     }
 
@@ -97,14 +102,12 @@ create_mesh :: proc(
     return
 }
 
-delete_mesh :: proc(mesh: ^Mesh_2D) {
-    h := get_heart()
-    g := &h.graphics
-
+destroy_mesh :: proc(mesh: ^Mesh_2D) {
+    g := &heart.graphics
     delete_key(&g.meshes, mesh.id)
 }
 
-delete_all_meshes :: proc() {
+destroy_all_meshes :: proc() {
     h := get_heart()
     g := &h.graphics
 
@@ -119,7 +122,7 @@ mesh_set_texture :: proc(mesh: ^Mesh_2D, texture_id: Image_Resource_ID, src: Ima
     image_asset, ok := get_texture(texture_id)
 
     if !ok {
-        fmt.println("ERROR: Cannot find texture for mesh")
+        fmt.println("[ERROR] Cannot find texture for mesh")
         return false
     }
 

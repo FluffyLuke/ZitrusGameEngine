@@ -3,7 +3,7 @@ package zitrus
 import "core:fmt"
 import "core:os"
 import "core:time"
-import la "core:math/linalg"
+import "base:runtime"
 
 import rl "vendor:raylib"
 
@@ -17,25 +17,16 @@ delta_time: f64
 total_time: f64
 heart: Zitrus_Heart
 
-Entity_ID :: Sparse_Index
-TOMBSTONE :: max(Sparse_Index)
-
 MAX_COMPONENTS :: 128
 Component_Mask :: bit_set[0..<MAX_COMPONENTS]
+Component_Cleanup :: proc(entity: Entity_ID, component_ptr: rawptr)
+Component_Cleanup_Default :: proc(entity: Entity_ID, component_ptr: rawptr) {}
 
 Component_Mask_Sparse_Set :: Sparse_Set
 Entity_ID_Sparse_Set :: Sparse_Set
 
 ASSET_ROOT :: "/assets/"
 SHADERS_ROOT :: "/shaders/"
-
-Level :: struct {
-    label: u32,
-    // custom_data: rawptr,
-    start: proc(),  // Initialize level
-    update: proc(), // Update logic
-    end: proc()     // Deallocate stuff
-}
 
 Zitrus_Heart :: struct {
     meta: struct {
@@ -45,22 +36,19 @@ Zitrus_Heart :: struct {
 
     renderer: Renderer,
     graphics: Graphics,
-    lights: Light_Data,
+    // lights: Light_Data,
 
     asset_manager: Asset_Manager,
     input_data: Input_Data,
 
-    level_data: struct {
-        should_quit: bool,
-        current_level: u32,
-        levels: []Level,
-    },
-
+    level_data: Level_Data,
     cache: map[typeid]rawptr,
+    
+    // === Entities ===
 
     next_id: Entity_ID,
     free_entities: [dynamic]Entity_ID,
-    component_pools: map[typeid]Sparse_Set,
+    component_pools: map[typeid](Sparse_Set),
 
     next_bit_mask: int,
     component_to_bit: map[typeid]int,
@@ -68,34 +56,34 @@ Zitrus_Heart :: struct {
 
     entity_masks: Component_Mask_Sparse_Set,
     entity_groups: map[Component_Mask]Entity_ID_Sparse_Set,
+
+    tags: Tag_Data,
 }
 
 // This takes ownership of the "levels" slice. It should be allocated on heap
-init_heart :: proc(size: Vec2Int, levels: []Level, action_map: map[int]Input_Key, callback_groups_number: int) {
+init_heart :: proc(size: Vec2Int, levels: map[Level_ID]Level, first_level: Level_ID, action_map: map[int]Input_Key, callback_groups_number: int) {
+    exe_path, err := os.get_executable_directory(context.allocator)
+    if err != os.ERROR_NONE {
+        fmt.printfln("[ERROR] Cannot load executable's path: %s", err)
+        os.exit(-1)
+    }
+    heart.meta.exe_path = exe_path
+    
     heart.next_id = 0
     heart.next_bit_mask = 0
-    heart.entity_masks = new_sparse_set(Component_Mask)
+    heart.entity_masks = new_sparse_set(Component_Mask, cleanup = Component_Cleanup_Default)
 
     // heart.component_pools = make(map[typeid]Sparse_Set)
     // heart.component_to_bit = make(map[typeid]int)
     // heart.bit_to_component = make(map[int]typeid)
     // heart.entity_groups = make(map[Component_Mask]Entity_ID_Sparse_Set)
 
-    register_component(Entity_Alive)
-    register_component(Entity_Dying)
-
-    exe_path, err := os.get_executable_directory(context.allocator)
-
-    if err != os.ERROR_NONE {
-        fmt.printfln("ERROR: Cannot load executable's path: %s", err)
-        os.exit(-1)
-    }
-
-    heart.meta.exe_path = exe_path
+    register_component(Entity_Alive, auto_cast Component_Cleanup_Default)
+    register_component(Entity_Dying, auto_cast Component_Cleanup_Default)
 
     init_renderer(size)
+    init_tags()
     init_camera()
-
     init_asset_manager(heart.meta.exe_path)
     configurate_input(action_map, callback_groups_number)
 
@@ -105,48 +93,52 @@ init_heart :: proc(size: Vec2Int, levels: []Level, action_map: map[int]Input_Key
     heart.meta.previous_frame = time.now()
 
     // Init first level
-    heart.level_data.levels = levels
+    init_levels(levels, first_level)
 }
 
 update_heart :: proc() -> bool {
-    // Update internal data
-    now := time.now()
-    diff := time.diff(heart.meta.previous_frame, now)
-    delta_time = time.duration_seconds(diff)
-    total_time += delta_time
-    heart.meta.previous_frame = now
+    // Update time
+    {
+        now := time.now()
+        diff := time.diff(heart.meta.previous_frame, now)
+        delta_time = time.duration_seconds(diff)
+        total_time += delta_time
+        heart.meta.previous_frame = now
+    }
 
-    heart.level_data.should_quit = rl.WindowShouldClose()
-
+    // Update input and game
     update_input()
-
     lvl := &heart.level_data
-    lvl.levels[lvl.current_level].update()
+    current_level := &lvl.levels[lvl.current_level]
+    current_level.update(current_level, delta_time)
 
     // Render and free memory
     render()
     free_all(context.temp_allocator)
 
     // Delete dying entities
-    v := view(Entity_Dying)
-    defer destroy_view(&v)
+    {
+        v := view(Entity_Dying)
+        defer destroy_view(&v)
 
-    for e in v.entities {
-        h, _ := get_component(e, Entity_Heart)
-        if h.on_delete != nil do h.on_delete(e)
+        for e in v.entities {
+            h, _ := get_component(e, Entity_Heart)
+            if h.on_delete != nil do h.on_delete(e)
 
-        append(&heart.free_entities, e)
+            append(&heart.free_entities, e)
 
-        mask := (^Component_Mask)(heart.entity_masks.get(&heart.entity_masks, e))^
-        
-        for bit in mask {
-            component_type: typeid = heart.bit_to_component[bit]
-            remove_component(e, component_type)
+            mask := (^Component_Mask)(heart.entity_masks.get(&heart.entity_masks, e))^
+            
+            for bit in mask {
+                component_type: typeid = heart.bit_to_component[bit]
+                remove_component(e, component_type)
+            }
         }
     }
 
+    heart.level_data.should_quit = rl.WindowShouldClose()
     if heart.level_data.should_quit {
-        lvl.levels[lvl.current_level].end()
+        current_level.end(current_level)
         asset_manager_unload_textures(true)
     }
 
@@ -157,43 +149,53 @@ destroy_heart :: proc() {
     // TODO: make this in dev build only
     // TODO: this can slow down the exit process, but will avoid all memory sanatizer errors
     // TODO: when entity has resources to delete
-    view := view(Entity_Heart)
-    defer destroy_view(&view)
-    for e in view.entities {
-        h := get_entity_heart(e)
-        if h.on_delete != nil {
-            h.on_delete(e)
-        } 
+
+    // Destroy ECS
+    {
+        view := view(Entity_Heart)
+        defer destroy_view(&view)
+        for e in view.entities {
+            h := get_entity_heart(e)
+            if h.on_delete != nil {
+                h.on_delete(e)
+            } 
+        }
+
+        heart.entity_masks.destroy_set(&heart.entity_masks)
+
+        defer delete(heart.entity_groups)
+        for _, &v in heart.entity_groups {
+            v.destroy_set(&v)
+        }
+
+        for _, &v in heart.component_pools {
+            v.destroy_set(&v)
+        }
+
+        delete(heart.free_entities)
+        delete(heart.component_to_bit)
+        delete(heart.bit_to_component)
+        delete(heart.component_pools)
+        
+        delete(heart.meta.exe_path)
     }
 
-    heart.entity_masks.destroy_set(&heart.entity_masks)
+    destroy_tags()
 
-    defer delete(heart.entity_groups)
-    for _, &v in heart.entity_groups {
-        v.destroy_set(&v)
+    // Destroy cache
+    {
+        for k, v in heart.cache {
+            free(v)
+        }
+        delete_map(heart.cache)
     }
 
-    for _, &v in heart.component_pools {
-        v.destroy_set(&v)
-    }
-
+    // Free rest of the resources
+    destroy_levels()
     destroy_input()
     destroy_graphics()
     destroy_asset_manager()
     destroy_renderer()
-
-    delete(heart.free_entities)
-    delete(heart.component_to_bit)
-    delete(heart.bit_to_component)
-    delete(heart.component_pools)
-    
-    delete(heart.meta.exe_path)
-    delete(heart.level_data.levels)
-
-    for k, v in heart.cache {
-        free(v)
-    }
-    delete_map(heart.cache)
 }
 
 get_heart :: #force_inline proc() -> ^Zitrus_Heart {
@@ -201,7 +203,7 @@ get_heart :: #force_inline proc() -> ^Zitrus_Heart {
 }
 
 start_game_loop :: proc() {
-    heart.level_data.levels[0].start()
+    load_new_level(&heart.level_data.levels[heart.level_data.current_level])
     for !update_heart() {}
 }
 
@@ -221,32 +223,6 @@ cache_remove :: proc(item: $T) -> bool {
     delete_key(&heart.cache, T)
 }
 
-// This function also clears current image assets (deallocates them)
-// and clears current entities
-// it will not however clear other data allocated during "start"
-Level_ID :: u32
-change_level :: proc(next_level: Level_ID) -> bool {
-    lvl := &heart.level_data
-
-    if next_level > u32(len(lvl.levels)) {
-        fmt.printfln("ERROR: Cannot change level. ID passed: %v", next_level)
-        return false
-    }
-
-    fmt.printfln("INFO: Changing level. ID passed: %v", next_level)
-
-    lvl.levels[lvl.current_level].end()
-    asset_manager_unload_textures(false)
-
-    clear_ecs()
-    delete_all_meshes()
-
-    lvl.current_level = next_level
-    lvl.levels[lvl.current_level].start()
-
-    return true
-}
-
 clear_ecs :: proc() {
     heart.entity_masks.clear(&heart.entity_masks)
 
@@ -262,63 +238,25 @@ clear_ecs :: proc() {
     clear(&heart.component_to_bit)
     clear(&heart.component_pools)
 
-    delete_all_meshes()
+    destroy_all_meshes()
 }
 
-Entity_On_Delete :: proc(Entity_ID)
-Entity_Heart :: struct {
-    position: Vec2,
-
-    scale: Vec2,
-    rotation: quaternion128,
-
-    on_delete: Entity_On_Delete,
+set_component_cleanup :: proc($T: typeid, cleanup_func: proc(id: Entity_ID, comp: ^T)) {
+    if p, ok := heart.component_pools[T]; !ok {
+        register_component(T)
+    }
+    set := &heart.component_pools[T]
+    set.cleanup = cleanup
 }
 
-Entity_Alive :: struct {}
-Entity_Dying :: struct {}
+register_component :: proc($T: typeid, cleanup_func: proc(id: Entity_ID, comp: ^T)) {
+    final_cleanup: Component_Cleanup = Component_Cleanup_Default
 
-// The bigger the depth, the further away it will be from the screen
-// Depth range = <0 ; RENDERING_DEPTH)
-create_entity :: proc(pos: Vec2 = {0,0}, on_delete: Entity_On_Delete = nil) -> (index: Entity_ID) {
-    index = heart.next_id
-    heart.next_id += 1;
-    heart.entity_masks.set(&heart.entity_masks, index, &Component_Mask {})
-
-    entity_heart := set_component(index, Entity_Heart{
-        position = pos,
-        // depth = depth,
-        scale = {1,1},
-        rotation = 1,
-
-        on_delete = on_delete
-    })
-
-    set_component(index, Entity_Alive{})
-    return
-}
-
-set_on_delete :: proc(id: Entity_ID, on_delete: Entity_On_Delete) {
-    h, _ := get_component(id, Entity_Heart)
-    h.on_delete = on_delete
-}
-
-destroy_entity :: proc(id: Entity_ID) -> bool {
-    if has_component(id, typeid_of(Entity_Dying)) {
-        fmt.printfln("Warning: Tried to delete entity twice")
-        return false
+    if cleanup_func != nil {
+        final_cleanup = transmute(Component_Cleanup)cleanup_func
     }
 
-    h, _ := get_component(id, Entity_Heart)
-
-    remove_component(id, Entity_Alive)
-    set_component(id, Entity_Dying {})
-    
-    return true
-}
-
-register_component :: proc($T: typeid) {
-    heart.component_pools[T] = new_sparse_set(T)
+    heart.component_pools[T] = new_sparse_set(T, cleanup = final_cleanup)
     heart.component_to_bit[T] = heart.next_bit_mask
     heart.bit_to_component[heart.next_bit_mask] = T
     heart.next_bit_mask += 1
@@ -335,7 +273,7 @@ get_component :: proc(id: Entity_ID, $T: typeid) -> (^T, bool) {
 
 set_component :: proc(id: Entity_ID, component: $T) -> ^T {
     if p, ok := heart.component_pools[T]; !ok {
-        register_component(T)
+        register_component(T, auto_cast Component_Cleanup_Default)
     }
     set := &heart.component_pools[T]
     set_bitset(id, T, true)
@@ -402,7 +340,7 @@ set_bitset :: proc(id: Entity_ID, component_type: typeid, has_it: bool) -> bool 
     // Get entity group (and create it if not existing)
     group, ok = &heart.entity_groups[bitset]
     if !ok {
-        heart.entity_groups[bitset] = new_sparse_set(Entity_ID)
+        heart.entity_groups[bitset] = new_sparse_set(Entity_ID, cleanup = Component_Cleanup_Default)
         group = &heart.entity_groups[bitset]
     }
 
@@ -419,7 +357,12 @@ View :: struct {
     entities: [dynamic]Entity_ID
 }
 
-view :: proc(component_types: ..typeid) -> (view: View) {
+view :: proc {
+    view_components,
+    view_tags,
+}
+
+view_components :: proc(component_types: ..typeid) -> (view: View) {
     target_mask := Component_Mask {}
     for t in component_types {
         mask, ok := heart.component_to_bit[t]
