@@ -4,11 +4,10 @@ import "core:fmt"
 import fp "core:path/filepath"
 import str "core:strings"
 
-Entity_Properties_NilRef :: -1
-Entity_Properties_Ref :: int
+Entity_Properties_NilRef :: ""
+Entity_Properties_Ref :: string
 Entity_Default_Properties :: struct {
     parent: Entity_Properties_Ref,
-    children: []Entity_Properties_Ref,
 
     position: Vec3,
     scale: Vec3,
@@ -70,6 +69,7 @@ destroy_levels :: proc() {
         delete_string(auto_cast l.label)
 
         for ref_id, e in l.entities {
+            defer delete_string(ref_id)
             for t in e.tags do delete_string(t)
             delete(e.tags)
 
@@ -192,15 +192,6 @@ create_entities :: proc(lvl: ^Level) {
             set_parent(parent_tuple.id, entity)
         } else {
             fmt.printfln("[ERROR] Cannot find parent of id '%v'", properties.parent)
-        }
-
-        for c_id in properties.children {
-            child, ok := ref_to_entity[c_id]
-            if ok {
-                set_parent(entity, child.id)
-            } else {
-                fmt.printfln("[ERROR] Cannot find child of id '%v'", c_id)
-            }
         }
     }
 }

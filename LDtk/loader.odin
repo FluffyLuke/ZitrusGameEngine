@@ -23,6 +23,7 @@ Entity_Reference :: struct {
 
 Entity_Def :: struct {
     is_attribute: bool,
+    parent: z.Entity_Properties_Ref,
     internal_id: string,
     name: string,
     color: z.Vec3,
@@ -102,9 +103,10 @@ load_world :: proc(relative_path: string) -> (map[z.Level_ID]z.Level, bool) {
 
         for e in l.entities {
             entity_parsed := z.Entity_Default_Properties {
+                parent = str.clone(e.parent),
                 position = {e.pos.x, e.pos.y, 0},
-                scale = 1,
-                // rotation
+                scale = z.Vec3 {1, 1, 1},
+                rotation = quaternion128(1+0i+0j+0k)
             }
 
             for t in e.tags do append(&entity_parsed.tags, str.clone(t))
@@ -113,7 +115,7 @@ load_world :: proc(relative_path: string) -> (map[z.Level_ID]z.Level, bool) {
             for k, v in e.values_floats do entity_parsed.values.floats[str.clone(k)] = v
             for k, v in e.values_strings do entity_parsed.values.strings[str.clone(k)] = str.clone(v)
 
-            append(&level_parsed.entities, entity_parsed)
+            level_parsed.entities[str.clone(e.internal_id)] = entity_parsed
         }
 
         parsed_levels[level_parsed.label] = level_parsed
@@ -144,7 +146,7 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
 
 
         // This list holds indexes of entities, that need to resolve their references after parsing is done
-        entity_with_references := make([dynamic]string, context.temp_allocator)
+        // entity_with_references := make([dynamic]string, context.temp_allocator)
 
 
         // Depth is assigned to intgrid layers and used layer for rendering
@@ -241,6 +243,7 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
 
                         entity_def := Entity_Def {
                             internal_id = str.clone(entity_obj["iid"].(json.String), context.temp_allocator),
+                            parent = str.clone(entity_obj["iid"].(json.String), context.temp_allocator),
                             is_attribute = false,
                             name = str.clone(entity_obj["__identifier"].(json.String)),
                             color = color,
@@ -273,7 +276,6 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
 
                         fields_array := entity_obj["fieldInstances"].(json.Array)
 
-                        has_references: bool = false
                         for field in fields_array {
                             field_obj := field.(json.Object)
 
@@ -316,11 +318,14 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
 
                                     entity_def.values_vec2[field_id] = size
                                 case "EntityRef":
-                                    has_references = true
                                     ref_obj := field_obj["__value"].(json.Object)
                                     entity_iid := ref_obj["entityIid"].(json.String)
-                                    
-                                    append(&entity_def.references, entity_iid)
+
+                                    if (str.to_lower(field_id, context.temp_allocator) == "parent") {
+                                        entity_def.parent = entity_iid
+                                    } else {
+                                        append(&entity_def.references, entity_iid)
+                                    }
                                 case:
                                     fmt.printfln("[WARNING] Unknown field type '%v'.", field_type_str)
                                     delete_string(field_id)
@@ -329,31 +334,11 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                         }
 
                         entities[entity_def.internal_id] = entity_def
-                        // This is c
-                        if has_references {
-                            append(&entity_with_references, entity_def.internal_id)
-                        }
                     }
                 }
 
                 case: {
                     fmt.printfln("[WARNING] Unknown layer of '%v' and id '%v'", layer_type, layer_id)
-                }
-            }
-        }
-
-        // Connect references
-        for e_iid in entity_with_references {
-            entity := &entities[e_iid]
-            for r_iid in entity.references {
-                ref := &entities[r_iid]
-
-                for k,v in ref.values_floats {
-                    entity.values_floats[k] = v
-                }
-
-                if len(ref.references) != 0 {
-                    fmt.println("[Warning] Resolving multiple layers of references is not yet implemented.")
                 }
             }
         }
