@@ -4,8 +4,12 @@ import "core:fmt"
 import fp "core:path/filepath"
 import str "core:strings"
 
-
+Entity_Properties_NilRef :: -1
+Entity_Properties_Ref :: int
 Entity_Default_Properties :: struct {
+    parent: Entity_Properties_Ref,
+    children: []Entity_Properties_Ref,
+
     position: Vec3,
     scale: Vec3,
     rotation: quaternion128,
@@ -22,7 +26,7 @@ Entity_Default_Properties :: struct {
 Level_ID :: distinct string
 Level :: struct {
     label: Level_ID,
-    entities: [dynamic]Entity_Default_Properties,
+    entities: map[Entity_Properties_Ref]Entity_Default_Properties,
 
     start: proc(self: ^Level),
     update: proc(self: ^Level, delta_time: f64),
@@ -65,7 +69,7 @@ destroy_levels :: proc() {
     for id, l in heart.level_data.levels {
         delete_string(auto_cast l.label)
 
-        for e in l.entities {
+        for ref_id, e in l.entities {
             for t in e.tags do delete_string(t)
             delete(e.tags)
 
@@ -83,7 +87,7 @@ destroy_levels :: proc() {
             delete_map(e.values.floats)
             delete_map(e.values.strings)
         }
-        delete(l.entities)
+        delete_map(l.entities)
     }
 
     delete_map(heart.level_data.levels)
@@ -126,19 +130,27 @@ load_new_level :: proc(lvl: ^Level) {
 
 @(private="file")
 create_entities :: proc(lvl: ^Level) {
-    for e in lvl.entities {
+    // Used to translate external editor's IDs to internal IDs
+    entity_data_tuple :: struct {id: Entity_ID, properties: Entity_Default_Properties}
+    ref_to_entity := map[Entity_Properties_Ref]entity_data_tuple {}
+    defer delete_map(ref_to_entity)
+
+    for ref_id, &e in lvl.entities {
         // Create basic entity
-        entity_id := create_entity(e.position, e.tags[:])
+        entity_id := create_entity(local_pos = e.position, tags = e.tags[:])
         for t in e.tags {
             set_tag(entity_id, t)
         }
+
+        // Map IDs
+        ref_to_entity[ref_id] = { entity_id, e }
 
         // Check if it has "_Texture" meta value
         add_texture: if value := get_entity_value(e.values.strings, "_Texture"); value != nil {
             texture_size: Unit2 = {1,1} // Default size
             depth: uint = 0 // Default depth
-            if v := get_entity_value(e.values.vec2, "_TextureSize"); v != nil {
-                texture_size = auto_cast v.(Vec2)
+            if v := get_entity_value(e.values.vec2, "_Texture_Size"); v != nil {
+                texture_size = v.(Vec2)
             }
 
             mesh := create_mesh(texture_size, depth)
@@ -151,6 +163,44 @@ create_entities :: proc(lvl: ^Level) {
             }
             destroy_mesh(&mesh)
             set_component(entity_id, mesh)
+        }
+
+        add_collider_2D: if value := get_entity_value(e.values.vec2, "_Collider2D"); value != nil {
+            collider := Collider_2D {
+                size = {1,1}, // Default size
+                origin = {0,0}, // Default origin
+            }
+
+            if v := get_entity_value(e.values.vec2, "_Collider2D_Size"); v != nil {
+                collider.size = auto_cast v.(Vec2)
+            }
+
+            if v := get_entity_value(e.values.vec2, "_Collider2D_Origin"); v != nil {
+                collider.origin = auto_cast v.(Vec2)
+            }
+
+            set_component(entity_id, collider)
+        }
+    }
+
+    // Resolve dependencies
+    for ref_id, &t in ref_to_entity {
+        entity := t.id
+        properties := &t.properties
+
+        if parent_tuple, ok := ref_to_entity[properties.parent]; ok {
+            set_parent(parent_tuple.id, entity)
+        } else {
+            fmt.printfln("[ERROR] Cannot find parent of id '%v'", properties.parent)
+        }
+
+        for c_id in properties.children {
+            child, ok := ref_to_entity[c_id]
+            if ok {
+                set_parent(entity, child.id)
+            } else {
+                fmt.printfln("[ERROR] Cannot find child of id '%v'", c_id)
+            }
         }
     }
 }

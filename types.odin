@@ -5,12 +5,20 @@ import "core:math"
 import "core:math/rand"
 import "core:strconv"
 import str "core:strings"
+import la "core:math/linalg"
 
 import rl "vendor:raylib"
 
 Vec4 :: [4]f32
 Vec3 :: [3]f32
 Vec2 :: [2]f32
+
+vec3_to_quaternion :: proc(vec: Vec3) -> quaternion128 {
+    rad := vec * la.to_radians(f32(1.0))
+    return la.quaternion_angle_axis(rad.x, Vec3 {1,0,0}) \
+        * la.quaternion_angle_axis(rad.y, Vec3 {0,1,0}) \
+        * la.quaternion_angle_axis(rad.z, Vec3 {0,0,1})
+}
 
 Vec4Int :: [4]i32
 Vec3Int :: [3]i32
@@ -33,13 +41,6 @@ Rectangle :: struct {
     y: f32      `json:"y"`,
     width: f32  `json:"w"`,
     height: f32 `json:"h"`,
-}
-
-// Component used to mark specific regions, like collider
-Region :: struct {
-    using area: Rectangle,
-
-    color: Vec4, // For debugging purposes
 }
 
 Circle :: struct {

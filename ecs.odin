@@ -83,6 +83,7 @@ init_heart :: proc(size: Vec2Int, levels: map[Level_ID]Level, first_level: Level
 
     init_renderer(size)
     init_tags()
+    init_physics()
     init_camera()
     init_asset_manager(heart.meta.exe_path)
     configurate_input(action_map, callback_groups_number)
@@ -193,6 +194,7 @@ destroy_heart :: proc() {
     // Free rest of the resources
     destroy_levels()
     destroy_input()
+    destroy_physics()
     destroy_graphics()
     destroy_asset_manager()
     destroy_renderer()
@@ -268,7 +270,7 @@ get_component :: proc(id: Entity_ID, $T: typeid) -> (^T, bool) {
     }
     set := &heart.component_pools[T]
     component_ref: Item_Pointer = set.get(set, id)
-    return (^T)(component_ref), true
+    return (^T)(component_ref), component_ref != nil
 }
 
 set_component :: proc(id: Entity_ID, component: $T) -> ^T {

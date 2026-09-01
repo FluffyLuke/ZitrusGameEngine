@@ -22,8 +22,8 @@ Renderer :: struct {
 WINDOW_UNIT_HEIGHT :: 9
 WINDOW_UNIT_WIDTH :: 16
 
-Unit2 :: distinct [2]f32
-Unit :: distinct f32
+Unit :: f32
+Unit2 :: [2]Unit
 
 init_renderer :: proc(window_size: Vec2Int) {
     rl.InitWindow(window_size.x, window_size.y, WINDOW_NAME)
@@ -44,6 +44,15 @@ destroy_renderer :: proc() {
     }
 
     rl.CloseWindow()
+}
+
+debug_mode :: proc(enabled: bool) {
+    if enabled {
+        fmt.println("[INFO] Enabling debug mode.")
+    } else {
+        fmt.println("[INFO] Disasbling debug mode.")
+    }
+    heart.renderer.debug_mode = enabled
 }
 
 render :: proc() {
@@ -90,13 +99,13 @@ render :: proc() {
                     (mesh.dimensions.y * h_c.scale.y * unit_scale_y) / 2.0,
                 }
 
-                src := rl_convert_rectangle(auto_cast mesh.src)
+                src := rl_convert_rectangle(auto_cast mesh.image.src)
                 if src.width == 0 || src.height == 0 {
                     src = rl.Rectangle {
                         x = 0, 
                         y = 0, 
-                        width = f32(mesh.image.width), 
-                        height = f32(mesh.image.height),
+                        width = f32(mesh.image.src.width), 
+                        height = f32(mesh.image.src.height),
                     }
                 }
 
@@ -104,7 +113,7 @@ render :: proc() {
                 if mesh.flip == .Y || mesh.flip == .XY do src.height *= -1
 
                 rl.DrawTexturePro(
-                    mesh.image, 
+                    mesh.image.asset, 
                     src,
                     dest,
                     origin,
@@ -114,39 +123,39 @@ render :: proc() {
             }
         }
 
-        if r.debug_mode {
-            render_debug()
-        }
+        if r.debug_mode do render_debug()
 
         rl.EndMode2D()
     rl.EndDrawing()
 }
 
+COLLIDER2D_DEBUG_COLOR :: rl.Color {255, 0, 0, 90}
+
 @(private="file")
 render_debug :: proc() {
-    view := view(Region)
+    view := view(Collider_2D)
     defer destroy_view(&view)
 
     for e in view.entities {
-        region, _ := get_component(e, Region)
+        collider, _ := get_component(e, Collider_2D)
 
         // Get unit system scale factor
         unit_scale_x, unit_scale_y := f32(rl.GetScreenWidth()) / WINDOW_UNIT_WIDTH, f32(rl.GetScreenHeight()) / WINDOW_UNIT_HEIGHT
 
         dest := rl.Rectangle {
-            x = region.area.x * unit_scale_x,
-            y = region.area.y * unit_scale_y * -1, // RAYLIB has inverted Y axis
-            width = region.area.width * unit_scale_x,
-            height = region.area.height * unit_scale_y,
+            x = collider.origin.x * unit_scale_x,
+            y = collider.origin.y * unit_scale_y * -1, // RAYLIB has inverted Y axis
+            width = collider.size.x * unit_scale_x,
+            height = collider.size.y * unit_scale_y,
         }
 
         origin := rl.Vector2 {
-            (region.area.width * unit_scale_x) / 2.0,
-            (region.area.height * unit_scale_y) / 2.0,
+            (collider.origin.x * unit_scale_x) / 2.0,
+            (collider.origin.y * unit_scale_y) / 2.0,
         }
 
-        color := region.color
-        rl.DrawRectanglePro(dest, origin, 0, {auto_cast color.x, auto_cast color.y, auto_cast color.z, 255/2})
+        color := COLLIDER2D_DEBUG_COLOR
+        rl.DrawRectanglePro(dest, origin, 0, {auto_cast color.x, auto_cast color.y, auto_cast color.z, color.w})
     }
 }
 

@@ -13,7 +13,17 @@ import z "../"
 // Add an offset between each layer
 LAYER_OFFSET :: 5
 
+Entity_Reference :: struct {
+    entity_iid: string,
+    layer_iid: string,
+    level_iid: string,
+    world_iid: string,
+    entity_def_ptr: Entity_Def,
+}
+
 Entity_Def :: struct {
+    is_attribute: bool,
+    internal_id: string,
     name: string,
     color: z.Vec3,
     pos: z.Vec2,
@@ -24,6 +34,8 @@ Entity_Def :: struct {
     values_ints: map[string]i64,
     values_floats: map[string]f64,
     values_strings: map[string]string,
+    // References to other objects (iids)
+    references: [dynamic]string,
 }
 
 Level :: struct {
@@ -126,7 +138,14 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
         layers := level_obj["layerInstances"].(json.Array)
 
         int_grid_layers := make([dynamic]Layer_IntGrid, allocator = context.temp_allocator)
-        entities := make([dynamic]Entity_Def, allocator = context.temp_allocator)
+
+        // List of entities
+        entities := make(map[string]Entity_Def, allocator = context.temp_allocator)
+
+
+        // This list holds indexes of entities, that need to resolve their references after parsing is done
+        entity_with_references := make([dynamic]string, context.temp_allocator)
+
 
         // Depth is assigned to intgrid layers and used layer for rendering
         // It starts from fifth layer, to make room for displaying stuff in front of it
@@ -221,6 +240,8 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                         }
 
                         entity_def := Entity_Def {
+                            internal_id = str.clone(entity_obj["iid"].(json.String), context.temp_allocator),
+                            is_attribute = false,
                             name = str.clone(entity_obj["__identifier"].(json.String)),
                             color = color,
                             pos = entity_pos,
@@ -236,10 +257,23 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                         tags_raw := entity_obj["__tags"].(json.Array)
 
                         for tag in tags_raw {
+                            if tag.(json.String) == "Attribute" do entity_def.is_attribute = true
                             append(&entity_def.tags, str.clone(tag.(json.String)))
                         }
 
+                        // Miscellaneous attributes for tags
+                        // This values can be overwritten by fields later
+                        for t in entity_def.tags {
+                            switch(t) {
+                                case "Collider":
+                                    entity_def.values_vec2["_Collider_Size"] = { entity_def.width, entity_def.height }
+                                case: {}
+                            }
+                        }
+
                         fields_array := entity_obj["fieldInstances"].(json.Array)
+
+                        has_references: bool = false
                         for field in fields_array {
                             field_obj := field.(json.Object)
 
@@ -273,7 +307,7 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                                         continue
                                     }
                                     x := f32(array_obj[0].(json.Float))
-                                    y := f32(array_obj[0].(json.Float))
+                                    y := f32(array_obj[1].(json.Float))
 
                                     size := z.Vec2 {x, y}
                                     // size += offset
@@ -281,13 +315,24 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                                     // size /= f32(layer_grid_size)
 
                                     entity_def.values_vec2[field_id] = size
+                                case "EntityRef":
+                                    has_references = true
+                                    ref_obj := field_obj["__value"].(json.Object)
+                                    entity_iid := ref_obj["entityIid"].(json.String)
+                                    
+                                    append(&entity_def.references, entity_iid)
                                 case:
                                     fmt.printfln("[WARNING] Unknown field type '%v'.", field_type_str)
                                     delete_string(field_id)
                                     continue
                             }
                         }
-                        append(&entities, entity_def)
+
+                        entities[entity_def.internal_id] = entity_def
+                        // This is c
+                        if has_references {
+                            append(&entity_with_references, entity_def.internal_id)
+                        }
                     }
                 }
 
@@ -297,8 +342,30 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
             }
         }
 
+        // Connect references
+        for e_iid in entity_with_references {
+            entity := &entities[e_iid]
+            for r_iid in entity.references {
+                ref := &entities[r_iid]
+
+                for k,v in ref.values_floats {
+                    entity.values_floats[k] = v
+                }
+
+                if len(ref.references) != 0 {
+                    fmt.println("[Warning] Resolving multiple layers of references is not yet implemented.")
+                }
+            }
+        }
+
         current_area.int_grids = slice.clone(int_grid_layers[:])
-        current_area.entities = slice.clone(entities[:])
+        entity_slice := make([]Entity_Def, len(entities))
+        index := 0
+        for iid, entity in entities {
+            entity_slice[index] = entity
+            index += 1 
+        }
+        current_area.entities = entity_slice
     }
     return ldtk
 }

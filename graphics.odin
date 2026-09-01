@@ -55,8 +55,10 @@ Mesh_2D :: struct {
     id: Mesh_ID,
     depth: uint,
 
-    image: Image_Asset,
-    src: Image_Source,
+    image: struct {
+        asset: Image_Asset,
+        src: Image_Source,
+    },
 
     dimensions: Unit2,
     flip: Mesh_Flip,
@@ -136,8 +138,8 @@ mesh_set_texture :: proc(mesh: ^Mesh_2D, texture_id: Image_Resource_ID, src: Ima
         }
     }
 
-    mesh.image = image_asset
-    mesh.src = proper_src
+    mesh.image.asset = image_asset
+    mesh.image.src = proper_src
 
     return true
 }
