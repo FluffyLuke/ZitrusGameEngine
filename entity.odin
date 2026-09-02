@@ -2,13 +2,19 @@ package zitrus
 
 import "core:fmt"
 import "core:slice"
+import str "core:strings"
 import la "core:math/linalg"
 
 Entity_ID :: Sparse_Index
 TOMBSTONE :: max(Sparse_Index)
 
+default_entity_name :: proc() -> string {
+    return str.clone("Lemon")
+}
+
 Entity_On_Delete :: proc(Entity_ID)
 Entity_Heart :: struct {
+    name: string,
     parent: Entity_ID,
     children: [dynamic]Entity_ID,
 
@@ -24,9 +30,16 @@ Entity_Alive :: struct {}
 Entity_Dying :: struct {}
 Entity_NoParent :: struct {}
 
+init_entities :: proc() {
+    register_component(Entity_Heart, proc(id: Entity_ID, heart: ^Entity_Heart) {
+        destroy_entity_heart(id, heart)
+    })
+}
+
 // The bigger the depth, the further away it will be from the screen
 // Depth range = <0 ; RENDERING_DEPTH)
 create_entity :: proc(
+    name: string,
     local_pos: Vec3 = {0,0,0},
     local_scale: Vec3 = {1,1,1},
     local_rotation: quaternion128 = quaternion128(1+0i+0j+0k),
@@ -39,6 +52,7 @@ create_entity :: proc(
     heart.entity_masks.set(&heart.entity_masks, index, &Component_Mask {})
 
     entity_heart := set_component(index, Entity_Heart{
+        name = name,
         parent = parent,
         on_delete = on_delete
         // Set rotation, scale and position down below by dedicated functions
@@ -61,29 +75,60 @@ create_entity :: proc(
     return
 }
 
-set_on_delete :: proc(id: Entity_ID, on_delete: Entity_On_Delete) {
-    h, _ := get_component(id, Entity_Heart)
-    h.on_delete = on_delete
+// Deletion of entity heart should only happen, when the whole entity is being destroyed.
+// This is because entity cannot work properly without this component.
+@(private="file")
+destroy_entity_heart :: proc(e: Entity_ID, entity_heart: ^Entity_Heart) {
+    delete_string(entity_heart.name)
+
+    // Remove parent from dying entity
+    set_parent(TOMBSTONE, e)
+    for c in entity_heart.children {
+        set_parent(TOMBSTONE, c)
+    }
+
+    delete(entity_heart.children)
 }
 
+// This function is used to MARK the entity for deletion
+// ECS will later call proper cleanup function
 destroy_entity :: proc(id: Entity_ID) -> bool {
     if has_component(id, typeid_of(Entity_Dying)) {
         fmt.printfln("[WARNING] Tried to delete entity twice")
         return false
     }
 
-    h, _ := get_component(id, Entity_Heart)
+    entity_heart := get_entity_heart(id)
 
     remove_component(id, Entity_Alive)
     set_component(id, Entity_Dying {})
 
-    for c in h.children {
+    for c in entity_heart.children {
         destroy_entity(c)
     }
     
     return true
 }
 
+@(private="package")
+clear_entities :: proc() {
+    v := view(Entity_Dying)
+    defer destroy_view(&v)
+
+    for e in v.entities {
+        h, _ := get_component(e, Entity_Heart)
+        if h.on_delete != nil do h.on_delete(e)
+
+        append(&heart.free_entities, e)
+
+        mask := (^Component_Mask)(heart.entity_masks.get(&heart.entity_masks, e))^
+        
+        for bit in mask {
+            component_type: typeid = heart.bit_to_component[bit]
+            remove_component(e, component_type)
+        }
+    }
+}
 entity_exists :: proc(id: Entity_ID) -> bool {
     if c, exists := get_component(id, Entity_Heart); !exists {
         return false
@@ -96,31 +141,59 @@ entity_exists :: proc(id: Entity_ID) -> bool {
     return true
 }
 
+get_entity_heart :: #force_inline proc(entity: Entity_ID) -> ^Entity_Heart {
+    heart, _ := get_component(entity, Entity_Heart)
+    return heart
+}
+
+set_on_delete :: proc(id: Entity_ID, on_delete: Entity_On_Delete) {
+    h, _ := get_component(id, Entity_Heart)
+    h.on_delete = on_delete
+}
+
 get_parent :: proc(id: Entity_ID) -> Entity_ID {
     return get_entity_heart(id).parent
 }
 
 set_parent :: proc(parent: Entity_ID, child: Entity_ID) -> bool {
     if !entity_exists(child) {
-        fmt.println("[WARNING] Cannot assign child entity, as it does not exist.")
+        fmt.println("[WARNING] Cannot assign child entity of id '%v', as it does not exist.", child)
         return false
     }
 
-    parent_heart := get_entity_heart(parent)
     child_heart := get_entity_heart(child)
-    
-    if !slice.contains(parent_heart.children[:], child) do append(&parent_heart.children, child)
+
+    if child_heart.parent == parent && parent != TOMBSTONE {
+        old_parent_heart := get_entity_heart(child_heart.parent)
+        fmt.println("[WARNING] Child '%v' already has the parent '%v.'", child_heart.name, old_parent_heart.name)
+    }
+
+    // Remove child from its current parent
+    if child_heart.parent != TOMBSTONE {
+        old_parent_heart := get_entity_heart(child_heart.parent)
+        index, found := slice.linear_search(old_parent_heart.children[:], child)
+        if found {
+            unordered_remove(&old_parent_heart.children, index)
+        } else {
+            fmt.println("[ERROR] Could not find child '%v' to remove from parent '%v'?", child_heart.name, old_parent_heart.name)
+            return false
+        }
+    }
+
+    // Check if parent is nil (this means entity does not have a parent)
+    if parent == TOMBSTONE {
+        child_heart.parent = TOMBSTONE
+        return true
+    }
+
+    new_parent_heart := get_entity_heart(parent)
+    append(&new_parent_heart.children, child)
     child_heart.parent = parent
 
     // Recalculate transform
     update_transform_recursive(child)
 
     return true
-}
-
-get_entity_heart :: #force_inline proc(entity: Entity_ID) -> ^Entity_Heart {
-    heart, _ := get_component(entity, Entity_Heart)
-    return heart
 }
 
 get_position_local :: proc(entity: Entity_ID) -> Vec3 {
@@ -157,6 +230,13 @@ set_position_local :: proc(entity: Entity_ID, new_local_position: Vec3) {
         // Pass simply the same local position as before, but this time parent was updated.
         update_transform_recursive(c)
     }
+}
+
+update_position_local :: proc(entity: Entity_ID, update_pos: Vec3) -> Vec3 {
+    heart := get_entity_heart(entity)
+    current_pos := heart.local_position
+    set_position_local(entity, current_pos + update_pos)
+    return heart.local_position
 }
 
 set_position_global :: proc(entity: Entity_ID, new_global_position: Vec3) {

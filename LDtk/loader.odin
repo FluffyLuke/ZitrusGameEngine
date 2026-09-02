@@ -27,7 +27,7 @@ Entity_Def :: struct {
     internal_id: string,
     name: string,
     color: z.Vec3,
-    pos: z.Vec2,
+    pos: z.Vec3,
     width: f32,
     height: f32,
     tags: [dynamic]string,
@@ -36,7 +36,7 @@ Entity_Def :: struct {
     values_floats: map[string]f64,
     values_strings: map[string]string,
     // References to other objects (iids)
-    references: [dynamic]string,
+    // references: [dynamic]string,
 }
 
 Level :: struct {
@@ -103,8 +103,8 @@ load_world :: proc(relative_path: string) -> (map[z.Level_ID]z.Level, bool) {
 
         for e in l.entities {
             entity_parsed := z.Entity_Default_Properties {
-                parent = str.clone(e.parent),
-                position = {e.pos.x, e.pos.y, 0},
+                parent = e.parent,
+                position = e.pos,
                 scale = z.Vec3 {1, 1, 1},
                 rotation = quaternion128(1+0i+0j+0k)
             }
@@ -143,11 +143,6 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
 
         // List of entities
         entities := make(map[string]Entity_Def, allocator = context.temp_allocator)
-
-
-        // This list holds indexes of entities, that need to resolve their references after parsing is done
-        // entity_with_references := make([dynamic]string, context.temp_allocator)
-
 
         // Depth is assigned to intgrid layers and used layer for rendering
         // It starts from fifth layer, to make room for displaying stuff in front of it
@@ -243,11 +238,11 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
 
                         entity_def := Entity_Def {
                             internal_id = str.clone(entity_obj["iid"].(json.String), context.temp_allocator),
-                            parent = str.clone(entity_obj["iid"].(json.String), context.temp_allocator),
+                            parent = str.clone("", context.temp_allocator),
                             is_attribute = false,
                             name = str.clone(entity_obj["__identifier"].(json.String)),
                             color = color,
-                            pos = entity_pos,
+                            pos = z.Vec3 { entity_pos.x, entity_pos.y, 0 },
                             width = width,
                             height = height,
                             tags = make([dynamic]string),
@@ -269,7 +264,7 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                         for t in entity_def.tags {
                             switch(t) {
                                 case "Collider":
-                                    entity_def.values_vec2["_Collider_Size"] = { entity_def.width, entity_def.height }
+                                    entity_def.values_vec2[str.clone("_Collider_Size")] = { entity_def.width, entity_def.height }
                                 case: {}
                             }
                         }
@@ -287,7 +282,15 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                                     // For some reason it treats integers as floats? Cast from float to int
                                     entity_def.values_ints[field_id] = i64(field_obj["__value"].(json.Float))
                                 case "Float":
-                                    entity_def.values_floats[field_id] = field_obj["__value"].(json.Float)
+                                    value := field_obj["__value"].(json.Float)
+                                    
+                                    if field_id == "_Depth" {
+                                        delete_string(field_id)
+                                        entity_def.pos.z = f32(value)
+                                    } else {
+                                        // Default
+                                        entity_def.values_floats[field_id] = value
+                                    }
                                 case "String":
                                     entity_def.values_strings[field_id] = str.clone(field_obj["__value"].(json.String))
                                 case "Point":
@@ -306,6 +309,7 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                                     array_obj := field_obj["__value"].(json.Array)
                                     if len(array_obj) != 2 {
                                         fmt.printfln("[Warning] Too many or too few fields in array. Skipping.")
+                                        delete_string(field_id)
                                         continue
                                     }
                                     x := f32(array_obj[0].(json.Float))
@@ -320,11 +324,12 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                                 case "EntityRef":
                                     ref_obj := field_obj["__value"].(json.Object)
                                     entity_iid := ref_obj["entityIid"].(json.String)
-
-                                    if (str.to_lower(field_id, context.temp_allocator) == "parent") {
-                                        entity_def.parent = entity_iid
+                                    if field_id == "_Parent" {
+                                        delete_string(field_id)
+                                        entity_def.parent = str.clone(entity_iid)
                                     } else {
-                                        append(&entity_def.references, entity_iid)
+                                        delete_string(field_id)
+                                        // append(&entity_def.references, entity_iid)
                                     }
                                 case:
                                     fmt.printfln("[WARNING] Unknown field type '%v'.", field_type_str)
@@ -363,6 +368,7 @@ delete_ldtk :: proc(ldtk: ^LDtk_Data) {
         }
         for entity in lvl.entities {
             delete_string(entity.name)
+            delete_string(entity.parent)
 
             for k, v in entity.values_strings {
                 delete_string(k)

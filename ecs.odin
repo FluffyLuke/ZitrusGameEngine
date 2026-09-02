@@ -81,6 +81,7 @@ init_heart :: proc(size: Vec2Int, levels: map[Level_ID]Level, first_level: Level
     register_component(Entity_Alive, auto_cast Component_Cleanup_Default)
     register_component(Entity_Dying, auto_cast Component_Cleanup_Default)
 
+    init_entities()
     init_renderer(size)
     init_tags()
     init_physics()
@@ -92,6 +93,10 @@ init_heart :: proc(size: Vec2Int, levels: map[Level_ID]Level, first_level: Level
 
     // TODO: Can cause potential problems in the future in the first frame of the game
     heart.meta.previous_frame = time.now()
+
+    when ODIN_DEBUG {
+        init_debug()
+    }
 
     // Init first level
     init_levels(levels, first_level)
@@ -118,29 +123,16 @@ update_heart :: proc() -> bool {
     free_all(context.temp_allocator)
 
     // Delete dying entities
-    {
-        v := view(Entity_Dying)
-        defer destroy_view(&v)
-
-        for e in v.entities {
-            h, _ := get_component(e, Entity_Heart)
-            if h.on_delete != nil do h.on_delete(e)
-
-            append(&heart.free_entities, e)
-
-            mask := (^Component_Mask)(heart.entity_masks.get(&heart.entity_masks, e))^
-            
-            for bit in mask {
-                component_type: typeid = heart.bit_to_component[bit]
-                remove_component(e, component_type)
-            }
-        }
-    }
+    clear_entities()
 
     heart.level_data.should_quit = rl.WindowShouldClose()
     if heart.level_data.should_quit {
         current_level.end(current_level)
         asset_manager_unload_textures(true)
+    }
+
+    when ODIN_DEBUG {
+        check_debug()
     }
 
     return heart.level_data.should_quit
@@ -162,8 +154,6 @@ destroy_heart :: proc() {
             } 
         }
 
-        heart.entity_masks.destroy_set(&heart.entity_masks)
-
         defer delete(heart.entity_groups)
         for _, &v in heart.entity_groups {
             v.destroy_set(&v)
@@ -172,7 +162,7 @@ destroy_heart :: proc() {
         for _, &v in heart.component_pools {
             v.destroy_set(&v)
         }
-
+        heart.entity_masks.destroy_set(&heart.entity_masks)
         delete(heart.free_entities)
         delete(heart.component_to_bit)
         delete(heart.bit_to_component)
@@ -198,6 +188,10 @@ destroy_heart :: proc() {
     destroy_graphics()
     destroy_asset_manager()
     destroy_renderer()
+
+    when ODIN_DEBUG {
+        destroy_debug()
+    }
 }
 
 get_heart :: #force_inline proc() -> ^Zitrus_Heart {
@@ -239,8 +233,6 @@ clear_ecs :: proc() {
 
     clear(&heart.component_to_bit)
     clear(&heart.component_pools)
-
-    destroy_all_meshes()
 }
 
 set_component_cleanup :: proc($T: typeid, cleanup_func: proc(id: Entity_ID, comp: ^T)) {

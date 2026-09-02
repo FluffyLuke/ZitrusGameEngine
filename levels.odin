@@ -110,7 +110,6 @@ change_level :: proc(next_level: Level_ID) -> bool {
     asset_manager_unload_textures(false)
 
     clear_ecs()
-    destroy_all_meshes()
 
     lvl_data.current_level = lvl_data.levels[next_level].label
     new_level := &lvl_data.levels[lvl_data.current_level]
@@ -137,7 +136,10 @@ create_entities :: proc(lvl: ^Level) {
 
     for ref_id, &e in lvl.entities {
         // Create basic entity
-        entity_id := create_entity(local_pos = e.position, tags = e.tags[:])
+        entity_name := get_entity_value(e.values.strings, "_Name")
+        if entity_name == nil || entity_name == "" do entity_name = default_entity_name()
+
+        entity_id := create_entity(entity_name.(string), local_pos = e.position, tags = e.tags[:])
         for t in e.tags {
             set_tag(entity_id, t)
         }
@@ -186,12 +188,14 @@ create_entities :: proc(lvl: ^Level) {
     // Resolve dependencies
     for ref_id, &t in ref_to_entity {
         entity := t.id
-        properties := &t.properties
+        parent_iid := t.properties.parent
 
-        if parent_tuple, ok := ref_to_entity[properties.parent]; ok {
+        if parent_iid == Entity_Properties_NilRef do continue
+
+        if parent_tuple, ok := ref_to_entity[parent_iid]; ok {
             set_parent(parent_tuple.id, entity)
         } else {
-            fmt.printfln("[ERROR] Cannot find parent of id '%v'", properties.parent)
+            fmt.printfln("[ERROR] Cannot find parent of id '%v'", parent_iid)
         }
     }
 }

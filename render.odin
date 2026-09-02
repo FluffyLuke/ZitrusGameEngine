@@ -88,15 +88,15 @@ render :: proc() {
                 unit_scale_x, unit_scale_y := f32(rl.GetScreenWidth()) / WINDOW_UNIT_WIDTH, f32(rl.GetScreenHeight()) / WINDOW_UNIT_HEIGHT
 
                 dest := rl.Rectangle {
-                    x = h_c.position.x * h_c.scale.x * unit_scale_x,
-                    y = h_c.position.y * h_c.scale.y * unit_scale_y * -1, // RAYLIB has inverted Y axis
-                    width = mesh.dimensions.x * h_c.scale.x * unit_scale_x,
-                    height = mesh.dimensions.y * h_c.scale.y * unit_scale_y,
+                    x = h_c.global_position.x * h_c.global_scale.x * unit_scale_x,
+                    y = h_c.global_position.y * h_c.global_scale.y * unit_scale_y * -1, // RAYLIB has inverted Y axis
+                    width = mesh.dimensions.x * h_c.global_scale.x * unit_scale_x,
+                    height = mesh.dimensions.y * h_c.global_scale.y * unit_scale_y,
                 }
 
                 origin := rl.Vector2 {
-                    (mesh.dimensions.x * h_c.scale.x * unit_scale_x) / 2.0,
-                    (mesh.dimensions.y * h_c.scale.y * unit_scale_y) / 2.0,
+                    (mesh.dimensions.x * h_c.global_scale.x * unit_scale_x) / 2.0,
+                    (mesh.dimensions.y * h_c.global_scale.y * unit_scale_y) / 2.0,
                 }
 
                 src := rl_convert_rectangle(auto_cast mesh.image.src)
