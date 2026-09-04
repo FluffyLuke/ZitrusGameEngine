@@ -53,7 +53,7 @@ create_entity :: proc(
 
     entity_heart := set_component(index, Entity_Heart{
         name = name,
-        parent = parent,
+        parent = TOMBSTONE,
         on_delete = on_delete
         // Set rotation, scale and position down below by dedicated functions
     })
@@ -175,7 +175,7 @@ set_parent :: proc(parent: Entity_ID, child: Entity_ID) -> bool {
         if found {
             unordered_remove(&old_parent_heart.children, index)
         } else {
-            fmt.println("[ERROR] Could not find child '%v' to remove from parent '%v'?", child_heart.name, old_parent_heart.name)
+            fmt.printfln("[ERROR] Could not find child '%v' to remove from parent '%v'?", child_heart.name, old_parent_heart.name)
             return false
         }
     }
@@ -359,6 +359,18 @@ set_rotation_global :: proc(entity: Entity_ID, new_global_rotation: quaternion12
     }
 }
 
+update_rotation_local :: proc(entity: Entity_ID, new_local_rotation: quaternion128) {
+    heart := get_entity_heart(entity)
+
+    set_rotation_local(entity, heart.local_rotation * new_local_rotation)
+}
+
+update_rotation_global :: proc(entity: Entity_ID, new_global_rotation: quaternion128) {
+    heart := get_entity_heart(entity)
+
+    set_rotation_local(entity, heart.global_rotation * new_global_rotation)
+}
+
 @(private="file")
 update_transform_recursive :: proc(entity: Entity_ID) {
     heart := get_entity_heart(entity)
@@ -370,7 +382,7 @@ update_transform_recursive :: proc(entity: Entity_ID) {
     
     // Update global position based on parent
     scaled_offset := heart.local_position * parent_scale
-    rotated_offset := la.mul(parent_rot, scaled_offset)
+    rotated_offset := la.mul(conj(parent_rot), scaled_offset) // Invert the value
     heart.global_position = parent_pos + rotated_offset
 
     // Update global scale

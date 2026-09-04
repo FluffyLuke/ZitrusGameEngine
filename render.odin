@@ -2,6 +2,7 @@ package zitrus
 
 import "core:fmt"
 import "core:os"
+import la "core:math/linalg"
 import str "core:strings"
 import "core:slice"
 
@@ -112,12 +113,15 @@ render :: proc() {
                 if mesh.flip == .X || mesh.flip == .XY do src.width *= -1
                 if mesh.flip == .Y || mesh.flip == .XY do src.height *= -1
 
+                pitch, yaw, roll := la.euler_angles_from_quaternion(h_c.global_rotation, .ZYX)
+                rotation := Vec3 {roll, yaw, pitch} / la.to_radians(f32(1.0))
+
                 rl.DrawTexturePro(
                     mesh.image.asset, 
                     src,
                     dest,
                     origin,
-                    0,
+                    rotation.z,
                     rl.WHITE,
                 )
             }

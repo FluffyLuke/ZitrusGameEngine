@@ -90,7 +90,15 @@ command_print :: proc(data: Print_Command) {
 
         parent_id_str := h_c.parent != TOMBSTONE ? fmt.aprint(h_c.parent) : str.clone("None")
 
-        fmt.printfln("- Name: '%v' | ID: %v | ParentID: %v | Position: %v", h_c.name, e, parent_id_str, h_c.global_position)
+        fmt.printf("- Name: '%v'", h_c.name)
+        fmt.printf(" | ID: %v", e)
+        fmt.printf(" | ParentID: %v", parent_id_str)
+        fmt.printf(" | Pos(L/G): %v / %v", h_c.local_position, h_c.global_position)
+
+        euler_global := quaternion_to_vec3(h_c.global_rotation)
+        euler_local := quaternion_to_vec3(h_c.local_rotation) 
+        fmt.printf(" | Rotation(L/G): %v / %v", euler_local, euler_global)
+        fmt.printf("\n")
     }
 }
 

@@ -2,10 +2,10 @@ package zitrus
 
 import "core:fmt"
 import "core:math"
+import la "core:math/linalg"
 import "core:math/rand"
 import "core:strconv"
 import str "core:strings"
-import la "core:math/linalg"
 
 import rl "vendor:raylib"
 
@@ -18,6 +18,11 @@ vec3_to_quaternion :: proc(vec: Vec3) -> quaternion128 {
     return la.quaternion_angle_axis(rad.x, Vec3 {1,0,0}) \
         * la.quaternion_angle_axis(rad.y, Vec3 {0,1,0}) \
         * la.quaternion_angle_axis(rad.z, Vec3 {0,0,1})
+}
+
+quaternion_to_vec3 :: proc(q: quaternion128) -> Vec3 {
+    pitch, yaw, roll := la.euler_angles_from_quaternion(q, .ZYX)
+    return (Vec3 {roll, yaw, pitch} / la.to_radians(f32(1.0)))
 }
 
 Vec4Int :: [4]i32

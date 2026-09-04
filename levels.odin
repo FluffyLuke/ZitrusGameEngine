@@ -137,6 +137,7 @@ create_entities :: proc(lvl: ^Level) {
     for ref_id, &e in lvl.entities {
         // Create basic entity
         entity_name := get_entity_value(e.values.strings, "_Name")
+        if entity_name != nil do entity_name = str.clone(entity_name.(string))
         if entity_name == nil || entity_name == "" do entity_name = default_entity_name()
 
         entity_id := create_entity(entity_name.(string), local_pos = e.position, tags = e.tags[:])
@@ -165,23 +166,6 @@ create_entities :: proc(lvl: ^Level) {
             }
             destroy_mesh(&mesh)
             set_component(entity_id, mesh)
-        }
-
-        add_collider_2D: if value := get_entity_value(e.values.vec2, "_Collider2D"); value != nil {
-            collider := Collider_2D {
-                size = {1,1}, // Default size
-                origin = {0,0}, // Default origin
-            }
-
-            if v := get_entity_value(e.values.vec2, "_Collider2D_Size"); v != nil {
-                collider.size = auto_cast v.(Vec2)
-            }
-
-            if v := get_entity_value(e.values.vec2, "_Collider2D_Origin"); v != nil {
-                collider.origin = auto_cast v.(Vec2)
-            }
-
-            set_component(entity_id, collider)
         }
     }
 

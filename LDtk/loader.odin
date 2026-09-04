@@ -238,7 +238,7 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
 
                         entity_def := Entity_Def {
                             internal_id = str.clone(entity_obj["iid"].(json.String), context.temp_allocator),
-                            parent = str.clone("", context.temp_allocator),
+                            parent = str.clone(""),
                             is_attribute = false,
                             name = str.clone(entity_obj["__identifier"].(json.String)),
                             color = color,
@@ -274,25 +274,29 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                         for field in fields_array {
                             field_obj := field.(json.Object)
 
-                            field_id := str.clone(field_obj["__identifier"].(json.String))
+                            field_id := field_obj["__identifier"].(json.String)
                             field_type_str := field_obj["__type"].(json.String)
+
+                            if _, ok := field_obj["__value"].(json.Null); ok {
+                                fmt.printfln("[WARNING] Value '%v' on entity '%v' is null.", field_id, entity_def.internal_id)
+                                continue
+                            }
                             
                             switch field_type_str {
                                 case "Int":
                                     // For some reason it treats integers as floats? Cast from float to int
-                                    entity_def.values_ints[field_id] = i64(field_obj["__value"].(json.Float))
+                                    entity_def.values_ints[str.clone(field_id)] = i64(field_obj["__value"].(json.Float))
                                 case "Float":
                                     value := field_obj["__value"].(json.Float)
                                     
                                     if field_id == "_Depth" {
-                                        delete_string(field_id)
                                         entity_def.pos.z = f32(value)
                                     } else {
                                         // Default
-                                        entity_def.values_floats[field_id] = value
+                                        entity_def.values_floats[str.clone(field_id)] = value
                                     }
                                 case "String":
-                                    entity_def.values_strings[field_id] = str.clone(field_obj["__value"].(json.String))
+                                    entity_def.values_strings[str.clone(field_id)] = str.clone(field_obj["__value"].(json.String))
                                 case "Point":
                                     vec_obj := field_obj["__value"].(json.Object)
                                     x := f32(vec_obj["cx"].(json.Float))
@@ -303,13 +307,12 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                                     point.y *= -1
                                     point /= f32(layer_grid_size)
 
-                                    entity_def.values_vec2[field_id] = point
+                                    entity_def.values_vec2[str.clone(field_id)] = point
                                 // Convert it to Vec2 if possible
                                 case "Array<Float>":
                                     array_obj := field_obj["__value"].(json.Array)
                                     if len(array_obj) != 2 {
                                         fmt.printfln("[Warning] Too many or too few fields in array. Skipping.")
-                                        delete_string(field_id)
                                         continue
                                     }
                                     x := f32(array_obj[0].(json.Float))
@@ -320,20 +323,17 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                                     // size.y *= -1
                                     // size /= f32(layer_grid_size)
 
-                                    entity_def.values_vec2[field_id] = size
+                                    entity_def.values_vec2[str.clone(field_id)] = size
                                 case "EntityRef":
                                     ref_obj := field_obj["__value"].(json.Object)
                                     entity_iid := ref_obj["entityIid"].(json.String)
                                     if field_id == "_Parent" {
-                                        delete_string(field_id)
                                         entity_def.parent = str.clone(entity_iid)
                                     } else {
-                                        delete_string(field_id)
                                         // append(&entity_def.references, entity_iid)
                                     }
                                 case:
                                     fmt.printfln("[WARNING] Unknown field type '%v'.", field_type_str)
-                                    delete_string(field_id)
                                     continue
                             }
                         }
