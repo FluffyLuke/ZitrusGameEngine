@@ -22,7 +22,7 @@ Entity_Reference :: struct {
 }
 
 Entity_Def :: struct {
-    is_attribute: bool,
+    // is_attribute: bool,
     parent: z.Entity_Properties_Ref,
     internal_id: string,
     name: string,
@@ -239,7 +239,7 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                         entity_def := Entity_Def {
                             internal_id = str.clone(entity_obj["iid"].(json.String), context.temp_allocator),
                             parent = str.clone(""),
-                            is_attribute = false,
+                            // is_attribute = false,
                             name = str.clone(entity_obj["__identifier"].(json.String)),
                             color = color,
                             pos = z.Vec3 { entity_pos.x, entity_pos.y, 0 },
@@ -255,7 +255,7 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                         tags_raw := entity_obj["__tags"].(json.Array)
 
                         for tag in tags_raw {
-                            if tag.(json.String) == "Attribute" do entity_def.is_attribute = true
+                            // if tag.(json.String) == "Attribute" do entity_def.is_attribute = true
                             append(&entity_def.tags, str.clone(tag.(json.String)))
                         }
 
@@ -264,7 +264,7 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                         for t in entity_def.tags {
                             switch(t) {
                                 case "Collider":
-                                    entity_def.values_vec2[str.clone("_Collider_Size")] = { entity_def.width, entity_def.height }
+                                    entity_def.values_vec2[str.clone("_Collider2D_Size")] = { entity_def.width, entity_def.height }
                                 case: {}
                             }
                         }
@@ -315,10 +315,19 @@ parse_world_json :: proc(root: json.Value, relative_path: string) -> LDtk_Data {
                                         fmt.printfln("[Warning] Too many or too few fields in array. Skipping.")
                                         continue
                                     }
-                                    x := f32(array_obj[0].(json.Float))
-                                    y := f32(array_obj[1].(json.Float))
+                                    
+                                    // if whole array is null, then treat it as not existing
+                                    for o in array_obj {
+                                        if v, ok := array_obj[0].(json.Null); !ok do continue
+                                    }
 
-                                    size := z.Vec2 {x, y}
+                                    x, x_ok := array_obj[0].(json.Float)
+                                    y, y_ok := array_obj[1].(json.Float)
+
+                                    if !x_ok do x = 0
+                                    if !y_ok do y = 0
+
+                                    size := z.Vec2 {f32(x), f32(y)}
                                     // size += offset
                                     // size.y *= -1
                                     // size /= f32(layer_grid_size)

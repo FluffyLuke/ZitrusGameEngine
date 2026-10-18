@@ -62,7 +62,7 @@ package zitrus
 
 //     set_component(id, Light_Source {})
 
-//     mesh := create_mesh({1.5,1.5}, 0)
+//     mesh := new_mesh({1.5,1.5}, 0)
 //     mesh_set_texture(&mesh, "placeholder.png")
 
 //     set_component(id, mesh)

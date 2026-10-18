@@ -24,8 +24,8 @@ package ldtk
 //     for grid in level.int_grids {
 //         for tile in grid.auto_tiles {
 //             image_id := z.Image_Resource_ID(grid.tileset_asset_path)
-//             //mesh, ok := z.create_mesh({tile.pos.width, tile.pos.height}, z.rectangle_to_image_source(tile.src, {512, 512}))
-//             mesh := z.create_mesh({1, 1}, grid.depth)
+//             //mesh, ok := z.new_mesh({tile.pos.width, tile.pos.height}, z.rectangle_to_image_source(tile.src, {512, 512}))
+//             mesh := z.new_mesh({1, 1}, grid.depth)
 //             // if !ok {
 //             //     fmt.printfln("[ERROR] Cannot create tile mesh from level '%v'!", level_name)
 //             //     z.destroy_mesh(&mesh)

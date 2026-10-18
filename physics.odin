@@ -1,8 +1,7 @@
 package zitrus
 
 Collider_2D :: struct {
-    origin: Vec2,
-    size: Vec2,
+    using size: Vec2,
 }
 
 init_physics :: proc() {

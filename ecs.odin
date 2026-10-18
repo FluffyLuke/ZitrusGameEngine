@@ -85,7 +85,6 @@ init_heart :: proc(size: Vec2Int, levels: map[Level_ID]Level, first_level: Level
     init_renderer(size)
     init_tags()
     init_physics()
-    init_camera()
     init_asset_manager(heart.meta.exe_path)
     configurate_input(action_map, callback_groups_number)
 
@@ -243,7 +242,7 @@ set_component_cleanup :: proc($T: typeid, cleanup_func: proc(id: Entity_ID, comp
     set.cleanup = cleanup
 }
 
-register_component :: proc($T: typeid, cleanup_func: proc(id: Entity_ID, comp: ^T)) {
+register_component :: proc($T: typeid, cleanup_func: proc(id: Entity_ID, comp: ^T) = nil) {
     final_cleanup: Component_Cleanup = Component_Cleanup_Default
 
     if cleanup_func != nil {
@@ -260,6 +259,7 @@ get_component :: proc(id: Entity_ID, $T: typeid) -> (^T, bool) {
     if p, ok := heart.component_pools[T]; !ok {
         return nil, false
     }
+    
     set := &heart.component_pools[T]
     component_ref: Item_Pointer = set.get(set, id)
     return (^T)(component_ref), component_ref != nil

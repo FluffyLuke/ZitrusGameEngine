@@ -11,9 +11,13 @@ when ODIN_DEBUG
 
 
 Print_Command :: struct {}
+Debug_Mode_Command :: struct {
+    state: bool
+}
 
 Debug_Command :: union {
     Print_Command,
+    Debug_Mode_Command,
 }
 
 Debug_Data :: struct {
@@ -37,6 +41,9 @@ check_debug :: proc() {
             case Print_Command: {
                 command_print(data)
             }
+            case Debug_Mode_Command: {
+                command_debug_mode(data)
+            }
         }
     }
     clear(&debug.commands)
@@ -58,14 +65,18 @@ debug_thread :: proc() {
             input := str.trim_space(string(buf[:n]))
 
             switch input {
-                case "print", "p", "print all": {
+                case "print", "p", "print all":
                     append_command(Print_Command {})
-                }
+                case "debug on":
+                    append_command(Debug_Mode_Command {true})
+                case "debug off":
+                    append_command(Debug_Mode_Command {false})
                 case: {
                     fmt.printfln("[INPUT|ERROR] Unknown command '%v'", input)
                 }
             }
         }
+        free_all(context.temp_allocator)
     }
 }
 
@@ -83,12 +94,13 @@ append_command :: proc(c: Debug_Command) {
 @(private="file")
 command_print :: proc(data: Print_Command) {
     v := view(Entity_Heart)
+    defer destroy_view(&v)
 
     fmt.printfln("[INPUT|INFO] Here are all of the entities:")
     for e in v.entities {
         h_c := get_entity_heart(e)
 
-        parent_id_str := h_c.parent != TOMBSTONE ? fmt.aprint(h_c.parent) : str.clone("None")
+        parent_id_str := h_c.parent != TOMBSTONE ? fmt.aprint(h_c.parent, allocator=context.temp_allocator) : str.clone("None", allocator=context.temp_allocator)
 
         fmt.printf("- Name: '%v'", h_c.name)
         fmt.printf(" | ID: %v", e)
@@ -100,6 +112,11 @@ command_print :: proc(data: Print_Command) {
         fmt.printf(" | Rotation(L/G): %v / %v", euler_local, euler_global)
         fmt.printf("\n")
     }
+}
+
+command_debug_mode :: proc(data: Debug_Mode_Command) {
+    fmt.printfln("[INPUT|INFO] Debug mode - %v", data.state ? "on" : "off")
+    get_heart().renderer.debug_mode = data.state
 }
 
 }

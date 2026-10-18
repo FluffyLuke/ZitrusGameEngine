@@ -148,15 +148,20 @@ create_entities :: proc(lvl: ^Level) {
         // Map IDs
         ref_to_entity[ref_id] = { entity_id, e }
 
-        // Check if it has "_Texture" meta value
-        add_texture: if value := get_entity_value(e.values.strings, "_Texture"); value != nil {
+        local_position: if value := get_entity_value(e.values.vec2, "_LocalPos"); value != nil {
+            v := value.(Vec2)
+            set_position_local(entity_id, Vec3 {v.x, v.y, 0})
+        }
+
+
+        add_texture: if value := get_entity_value(e.values.strings, "_Sprite"); value != nil {
             texture_size: Unit2 = {1,1} // Default size
             depth: uint = 0 // Default depth
-            if v := get_entity_value(e.values.vec2, "_Texture_Size"); v != nil {
+            if v := get_entity_value(e.values.vec2, "_Sprite_Size"); v != nil {
                 texture_size = v.(Vec2)
             }
 
-            mesh := create_mesh(texture_size, depth)
+            mesh := new_mesh(texture_size, depth)
 
             image_id := Image_Resource_ID(value.(string))
             if ok := mesh_set_texture(&mesh, image_id); !ok {
@@ -166,6 +171,18 @@ create_entities :: proc(lvl: ^Level) {
             }
             destroy_mesh(&mesh)
             set_component(entity_id, mesh)
+        }
+
+        add_collider2D: if ok := has_tag(e.tags[:], "_Collider2D"); ok {
+            collider_size := Vec2 {1, 1}
+            if ok = has_tag(e.tags[:], "_Collider2D_Size"); ok {
+                collider_size = 0
+            } else {
+                fmt.printfln("[WARNING]: Collider size for entity '%v' is not specified.", entity_name)
+            }
+
+            collider := Collider_2D { collider_size }
+            set_component(entity_id, collider)
         }
     }
 
@@ -190,6 +207,13 @@ get_entity_value :: proc {
     get_entity_value_float,
     get_entity_value_int,
     get_entity_value_string,
+}
+
+has_tag :: proc(tags: []string, tag: string) -> bool {
+    for t in tags {
+        if t == tag do return true
+    }
+    return false
 }
 
 get_entity_value_vec2 :: proc(e: map[string]Vec2, value_id: string) -> Maybe(Vec2) {

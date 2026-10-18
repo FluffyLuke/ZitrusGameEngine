@@ -50,7 +50,6 @@ next_mesh_id: Mesh_ID = 0
 
 Image_Source :: distinct Rectangle
 
-// TODO: remove "depth" and simply use z coordinate
 Mesh_2D :: struct {
     id: Mesh_ID,
     depth: uint,
@@ -81,7 +80,7 @@ destroy_graphics :: proc() {
     delete(heart.graphics.meshes)
 }
 
-create_mesh :: proc(
+new_mesh :: proc(
     size: Unit2,
     depth: uint
 ) -> (mesh: Mesh_2D) {
