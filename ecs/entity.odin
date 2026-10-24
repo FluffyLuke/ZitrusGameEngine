@@ -86,10 +86,38 @@ create_entity :: proc() -> Entity {
     return next_index
 }
 
-add_component :: proc(e: Entity) {
-
+// TODO: Some of the functions take raw types, while other RawComponentPtr.
+// This should be standarized.
+add_component :: proc(e: Entity, component: $T) {
     component_data := [dynamic]RawComponentPointer {}
+    defer delete(component_data)
+
+    component_types := [dynamic]typeid {}
+    defer delete(component_types)
+
+    component_id := register_component(T)
+
+    // If entity belongs to an archetype, then remove entity from it.
     if get_component_data(e, &component_data) {
         remove_from_archetype(e)
+        for raw in component_data {
+            type := get_component_type(raw.id)
+            append(&component_types, type)
+        }
     }
+    // Copying entire component, because immutable arguments are great!!!
+    component_copy := component
+
+    // Add new component to the list.
+    append(&component_data, RawComponentPointer {
+        id = component_id,
+        data = &component_copy,
+        size = size_of(T),
+    })
+
+    append(&component_types, T)
+
+    // Paste that data into new archetype.
+    archetype := get_or_create_archetype(..component_types[:])
+    add_to_archetype(archetype, e, component_data[:])
 }

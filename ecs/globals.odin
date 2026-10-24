@@ -6,7 +6,7 @@ ZECS :: struct {
 
     // List of all entities. May also contain dead ones.
     entities: [dynamic]EntityRecord,
-    archetypes: map[ArchetypeMask]Archetype
+    archetypes: map[ArchetypeMask]^Archetype
 }
 
 zecs: ZECS = {}
