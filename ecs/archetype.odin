@@ -91,6 +91,7 @@ get_components_in_mask :: proc(mask: ArchetypeMask, out: ^[dynamic]typeid) {
     }
 }
 
+
 sort_raw_components :: proc(archetype: ^Archetype, components: []RawComponentPointer, ordered: ^[]RawComponentPointer) {
     // Metadata should be ordered
     for meta, i in archetype.component_metadata {
@@ -349,7 +350,7 @@ remove_from_archetype :: proc(e: Entity) -> bool {
     if record.archetype == nil do return false
     archetype := zecs.archetypes[record.archetype.(ArchetypeMask)]
 
-    chunk := archetype.chunks[record.chunk]
+    chunk := &archetype.chunks[record.chunk]
     defer {
         record.chunk = -1
         record.chunk_index = -1

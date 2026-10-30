@@ -121,3 +121,15 @@ add_component :: proc(e: Entity, component: $T) {
     archetype := get_or_create_archetype(..component_types[:])
     add_to_archetype(archetype, e, component_data[:])
 }
+
+get_component :: proc(e: Entity, $T: typeid) -> ^T {
+    component_data := [dynamic]RawComponentPointer {}
+    defer delete(component_data)
+
+    component_id := register_component(T)
+
+    // If it does not belong to any archetype, then return nothing.
+    if !get_component_data(e, &component_data) {
+        return nil
+    }
+}
