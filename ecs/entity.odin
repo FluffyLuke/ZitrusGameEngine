@@ -1,6 +1,7 @@
 package ecs;
 
 import "core:fmt"
+import "core:mem"
 import "core:os"
 
 // Left 32 bits are used for marking generation
@@ -80,15 +81,43 @@ create_entity :: proc() -> Entity {
         generation = 0,
         archetype = nil,
         chunk = -1,
+        
         chunk_index = -1,
     }
     append(&zecs.entities, entity_record)
     return next_index
 }
 
+@(private="package")
+delete_entity :: proc(e: Entity) {
+    component_data := [dynamic]RawComponentPointer {}
+    defer delete(component_data)
+
+    if get_component_data(e, &component_data) {
+        for raw in component_data {
+            destructor := get_component_destructor(raw.id)
+            if destructor != nil do destructor(raw.data)
+        }
+    }
+    remove_from_archetype(e)
+
+    generation, index := split_entity(e)
+    append(&zecs.free_entities, index)
+
+    entity_record := get_entity_record(e)
+    entity_record.archetype = nil // clear archetype
+    entity_record.generation += 1 // increment generation
+    entity_record.chunk = -1
+    entity_record.chunk_index = -1
+}
+
+schedule_deletion :: proc(e: Entity) {
+    add_component(e, DeleteComponent {})
+}
+
 // TODO: Some of the functions take raw types, while other RawComponentPtr.
 // This should be standarized.
-add_component :: proc(e: Entity, component: $T) {
+add_component :: proc(e: Entity, component: $T) -> ^T{
     component_data := [dynamic]RawComponentPointer {}
     defer delete(component_data)
 
@@ -117,19 +146,40 @@ add_component :: proc(e: Entity, component: $T) {
 
     append(&component_types, T)
 
-    // Paste that data into new archetype.
-    archetype := get_or_create_archetype(..component_types[:])
+    // Paste that data into new archetype. Mark if new archetype was created.
+    archetype, created_new  := get_or_create_archetype(..component_types[:])
+    if created_new do zecs.new_archetype_created = true
     add_to_archetype(archetype, e, component_data[:])
+
+    return get_component(e, T)
 }
 
 get_component :: proc(e: Entity, $T: typeid) -> ^T {
-    component_data := [dynamic]RawComponentPointer {}
-    defer delete(component_data)
+    record := get_entity_record(e)
+    
+    // Check if entity is even alive.
+    if record.archetype == nil do return nil
 
-    component_id := register_component(T)
+    archetype := zecs.archetypes[record.archetype.(ArchetypeMask)]
+    target_id := register_component(T)
 
-    // If it does not belong to any archetype, then return nothing.
-    if !get_component_data(e, &component_data) {
-        return nil
+    // Get column of desired component.
+    column_index := -1
+    for meta, i in archetype.component_metadata {
+        if meta.id == target_id {
+            column_index = i
+            break
+        }
     }
+
+    // Column not found in this archetype, return nil.
+    if column_index == -1 do return nil
+
+    chunk := archetype.chunks[record.chunk]
+    offset := chunk.offsets[column_index]
+    size := archetype.component_metadata[column_index].size
+
+    ptr := mem.ptr_offset(cast(^u8)chunk.components, (record.chunk_index * size) + offset)
+    
+    return (^T)(ptr)
 }

@@ -8,10 +8,12 @@ import t "core:thread"
 
 Exit_Command :: struct {}
 Print_Archetypes_Command :: struct {}
+Print_Components_Command :: struct {}
 
 Debug_Command :: union {
     Exit_Command,
     Print_Archetypes_Command,
+    Print_Components_Command,
 }
 
 Debug_Data :: struct {
@@ -38,6 +40,9 @@ check_debug :: proc() {
             case Print_Archetypes_Command: {
                 command_print_archetypes()
             }
+            case Print_Components_Command: {
+                command_print_components()
+            }
         }
     }
     clear(&debug.commands)
@@ -61,8 +66,10 @@ debug_thread :: proc() {
             switch input {
                 case "exit", "e":
                     append_command(Exit_Command {})
-                case "print_archetypes", "p_e", "p":
+                case "print_archetypes", "p_e":
                     append_command(Print_Archetypes_Command {})
+                case "print_components", "p_c":
+                    append_command(Print_Components_Command {})
                 case: {
                     fmt.printfln("[INPUT|ERROR] Unknown command '%v'", input)
                 }
@@ -86,6 +93,14 @@ append_command :: proc(c: Debug_Command) {
 @(private="file")
 command_exit :: proc() {
     zecs.should_close = true;
+}
+
+@(private="file")
+command_print_components :: proc() {
+    fmt.printfln("[DEBUG] Printing all components...")
+    for type, id in get_component_map() {
+        fmt.printfln("Type: '%v', ID: '%v'", type, id)
+    }
 }
 
 @(private="file")

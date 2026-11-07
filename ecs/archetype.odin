@@ -144,6 +144,11 @@ next_id: ComponentID = 0
 component_to_bit := map[typeid]ComponentID {}
 @(private="file")
 bit_to_component := map[ComponentID]typeid {}
+@(private="file")
+component_destructors := map[ComponentID]proc(component: rawptr) {}
+
+@(private="package")
+get_component_map :: proc() -> map[typeid]ComponentID { return component_to_bit }
 
 register_component :: proc(component_type: typeid) -> (id: ComponentID) {
     registered_id, exists := component_to_bit[component_type]
@@ -162,13 +167,24 @@ register_component :: proc(component_type: typeid) -> (id: ComponentID) {
     return;
 }
 
-get_component_id :: proc {
-    get_component_id_type,
-    get_component_id_typeid,
+set_component_destructor :: proc($T: typeid, destructor: proc(component: T)) {
+    c_id := register_component(T)
+    component_destructors[c_id] = auto_cast destructor
 }
 
-get_component_id_type :: proc(component_type: $T) -> (ComponentID, bool) {
-    return get_component_id_typeid(type_of(component_type))
+get_component_destructor :: proc(id: ComponentID) -> proc(rawptr) {
+    destructor, ok := component_destructors[id]
+    if ok {
+        return destructor
+    }
+    return nil
+}
+
+
+get_component_id:: proc(component_type: $T) -> (ComponentID, bool) {
+    #assert(T != typeid, "Cannot pass raw 'typeid'. Use 'get_component_id_typeid' procedure instead!")
+
+    return component_to_bit[T]
 }
 
 get_component_id_typeid :: proc(component_typeid: typeid) -> (ComponentID, bool) {
@@ -222,24 +238,37 @@ make_archetype :: proc(component_types: ..typeid) -> ^Archetype {
 }
 
 // Returns pointer to the archetype. If archetype does not exists, procedure will create it.
-get_or_create_archetype :: proc(components: ..typeid) -> ^Archetype {
+// Second return value indicates, if new archetype was created.
+get_or_create_archetype :: proc(components: ..typeid) -> (^Archetype, bool) {
     component_ids := make([]ComponentID, len(components))
     defer delete(component_ids)
     
+    delete_archetype := false
     for c_t, i in components {
         id := register_component(c_t)
         component_ids[i] = id
+
+        if c_t == DeleteComponent do delete_archetype = true
     }
 
     mask := create_archetype_mask(component_ids)
     archetype, ok := zecs.archetypes[mask]
 
+    created_new := false
     if !ok {
-        zecs.archetypes[mask] = make_archetype(..components[:])
+        new_archetype := make_archetype(..components[:])
+        zecs.archetypes[mask] = new_archetype
+
+        if delete_archetype {
+            // Add to delete archetypes.
+            zecs.deletion_archetypes[mask] = new_archetype
+        }
+
         archetype = zecs.archetypes[mask]
+        created_new = true
     }
 
-    return archetype
+    return archetype, created_new
 }
 
 delete_archetype :: proc(archetype: ^Archetype) {
@@ -303,7 +332,7 @@ add_to_archetype :: proc(archetype: ^Archetype, e: Entity, components: []RawComp
         if c.count < c.capacity {
             current_chunk = &c
             current_chunk_index = i
-            break // ADD THIS!
+            break
         }
     }
 

@@ -43,6 +43,7 @@ query_registration_queue := [dynamic]QueryPendingRegistration {}
 
 add_query_start :: proc(component_types: []typeid, query: proc(e: Entity)) {
     copied_types := make([]typeid, len(component_types))
+    copy(copied_types, component_types)
     
     append(&query_registration_queue, QueryPendingRegistration {
         type = QueryStart {
@@ -52,8 +53,10 @@ add_query_start :: proc(component_types: []typeid, query: proc(e: Entity)) {
     })
 }
 
+// Delta time is in seconds.
 add_query_update :: proc(component_types: []typeid, query: proc(e: Entity, delta_time: Time)) {
     copied_types := make([]typeid, len(component_types))
+    copy(copied_types, component_types)
     
     append(&query_registration_queue, QueryPendingRegistration {
         type = QueryUpdate {
@@ -65,6 +68,7 @@ add_query_update :: proc(component_types: []typeid, query: proc(e: Entity, delta
 
 add_query_end :: proc(component_types: []typeid, query: proc(e: Entity)) {
     copied_types := make([]typeid, len(component_types))
+    copy(copied_types, component_types)
     
     append(&query_registration_queue, QueryPendingRegistration {
         type = QueryEnd {
@@ -72,6 +76,29 @@ add_query_end :: proc(component_types: []typeid, query: proc(e: Entity)) {
         },
         component_types = copied_types,
     })
+}
+
+// Archetypes may be created or deleted on the fly.
+// This requires the queries to be reconnected when this happens.
+reconnect_query :: proc(query: ^RegisteredQuery) {
+    clear(&query.archetypes)
+    for mask, archetype in zecs.archetypes {
+        if components_in_mask(mask, query.component_ids) {
+            append(&query.archetypes, archetype)
+        }
+    }
+}
+
+refresh_all_queries :: proc() {
+    for &q in zecs.queries.start {
+        reconnect_query(&q)
+    }
+    for &q in zecs.queries.update {
+        reconnect_query(&q)
+    }
+    for &q in zecs.queries.end {
+        reconnect_query(&q)
+    }
 }
 
 // Consume all queries pending registration.
@@ -89,9 +116,8 @@ register_queries :: proc() {
 
         // Get list of components used in each query (useful metadata).
         component_ids := make([]ComponentID, len(q.component_types))
-        defer delete(component_ids)
         for c_t, i in q.component_types {
-            component_id, _ := get_component_id(c_t)
+            component_id, _ := get_component_id_typeid(c_t)
             component_ids[i] = component_id
         }
 
@@ -102,11 +128,7 @@ register_queries :: proc() {
         }
 
         // Find archetypes, that have specified components.
-        for mask, archetype in zecs.archetypes {
-            if components_in_mask(mask, component_ids) {
-                append(&query.archetypes, archetype)
-            }
-        }
+        reconnect_query(&query)
 
         // Append the query
         switch t in q.type {
@@ -117,4 +139,9 @@ register_queries :: proc() {
     }
 
     delete(query_registration_queue)
+}
+
+delete_query :: proc(query: RegisteredQuery) {
+    delete(query.archetypes)
+    delete(query.component_ids)
 }
