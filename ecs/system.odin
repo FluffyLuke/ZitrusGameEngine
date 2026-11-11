@@ -162,15 +162,18 @@ register_systems :: proc() {
         }
 
         append(&systems_unordered, registered_system)
-        // Since this map stores a pointer, it is guaranteed that new systems won't be added and address of them won't change.
-        index_to_system[s.index] = &systems_unordered[len(systems_unordered)-1]
     }
 
     // Now we need to put them in order.
     slice.sort_by(systems_unordered[:], proc(i, j: RegisteredSystem) -> bool {
         return i.index < j.index
     })
+
     zecs.systems = systems_unordered
+    for s in zecs.systems {
+        // Since this map stores a pointer, it is guaranteed that new systems won't be added and address of them won't change.
+        index_to_system[s.index] = &systems_unordered[len(systems_unordered)-1]
+    }
 
     for k, v in system_registration_queue {
         delete(v)
