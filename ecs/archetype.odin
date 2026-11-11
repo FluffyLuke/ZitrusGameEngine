@@ -147,7 +147,6 @@ bit_to_component := map[ComponentID]typeid {}
 @(private="file")
 component_destructors := map[ComponentID]proc(component: rawptr) {}
 
-@(private="package")
 get_component_map :: proc() -> map[typeid]ComponentID { return component_to_bit }
 
 register_component :: proc(component_type: typeid) -> (id: ComponentID) {

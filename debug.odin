@@ -1,10 +1,12 @@
-package ecs
+package zitrus
 
 import "core:fmt"
 import "core:os"
 import str "core:strings"
 import s "core:sync"
 import t "core:thread"
+
+import "ecs"
 
 Exit_Command :: struct {}
 Print_Archetypes_Command :: struct {}
@@ -66,7 +68,7 @@ debug_thread :: proc() {
             switch input {
                 case "exit", "e":
                     append_command(Exit_Command {})
-                case "print_archetypes", "p_e":
+                case "print_archetypes", "p_a":
                     append_command(Print_Archetypes_Command {})
                 case "print_components", "p_c":
                     append_command(Print_Components_Command {})
@@ -92,13 +94,13 @@ append_command :: proc(c: Debug_Command) {
 
 @(private="file")
 command_exit :: proc() {
-    zecs.should_close = true;
+    ecs.zecs.should_close = true;
 }
 
 @(private="file")
 command_print_components :: proc() {
     fmt.printfln("[DEBUG] Printing all components...")
-    for type, id in get_component_map() {
+    for type, id in ecs.get_component_map() {
         fmt.printfln("Type: '%v', ID: '%v'", type, id)
     }
 }
@@ -106,11 +108,11 @@ command_print_components :: proc() {
 @(private="file")
 command_print_archetypes :: proc() {
     fmt.printfln("[DEBUG] Printing all archetypes...")
-    for mask, archetype in zecs.archetypes {
+    for mask, archetype in ecs.zecs.archetypes {
         fmt.printfln("Archetype of mask '%v'", mask)
         component_types := [dynamic]typeid {}
         for c in archetype.component_metadata {
-            append(&component_types, get_component_type(c.id))
+            append(&component_types, ecs.get_component_type(c.id))
         }
         defer delete(component_types)
 

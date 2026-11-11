@@ -2,7 +2,6 @@ package ecs
 
 // This package contains default entities
 
-@(private="package")
 init_default_components :: proc() {
     init_timer()
 }
@@ -29,17 +28,20 @@ TimeoutComponent :: struct {}
 @(private="file")
 init_timer :: proc() {
     register_component(TimerComponent)
-    add_query_update({TimerComponent}, proc(entity: Entity, delta: Time) {
-        timer := get_component(entity, TimerComponent)
+    add_system(InternalSystems.Update, {Query {
+        {TimerComponent},
+        proc(entity: Entity, delta: Time) {
+            timer := get_component(entity, TimerComponent)
 
-        if !timer.counting do return;
+            if !timer.counting do return;
 
-        timer.t += delta
-        
-        if timer.timeout <= timer.t {
-            add_component(entity, TimeoutComponent {})
-            timer.counting = false
-        }
+            timer.t += delta
+            
+            if timer.timeout <= timer.t {
+                add_component(entity, TimeoutComponent {})
+                timer.counting = false
+            }
+        }}
     })
 }
 

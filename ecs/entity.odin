@@ -88,7 +88,8 @@ create_entity :: proc() -> Entity {
     return next_index
 }
 
-@(private="package")
+// @(private="package")
+// Should not be used by the end user!
 delete_entity :: proc(e: Entity) {
     component_data := [dynamic]RawComponentPointer {}
     defer delete(component_data)
