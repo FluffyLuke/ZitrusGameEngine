@@ -34,4 +34,5 @@ delete_zecs :: proc() {
 
     delete(zecs.archetypes)
     delete(zecs.entities)
+    delete(zecs.free_entities)
 }

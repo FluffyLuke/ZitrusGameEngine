@@ -4,7 +4,14 @@ import "core:fmt"
 import "core:time"
 
 import "ecs"
+import "assets"
 import "graphics"
+
+init_engine := proc() {
+    // Init everything
+    ecs.init_default_components()
+    graphics.init_rendering()
+}
 
 start_engine := proc() {
     game_loop()
@@ -15,10 +22,7 @@ game_loop :: proc() {
     when ODIN_DEBUG {
         init_debug()
     }
-
     
-    ecs.init_default_components()
-
     // This should run after all queries are added!
     ecs.register_systems()
 
@@ -50,10 +54,12 @@ game_loop :: proc() {
         delta_time: f64 = time.duration_seconds(time.diff(previous_time, current_time))
         previous_time = current_time
 
+        // General update
         if generic_update := ecs.get_system(ecs.InternalSystems.Update); generic_update != nil {
             ecs.run_system(generic_update, delta_time)
         }
 
+        // User defined systems
         for i in 0..< len(ecs.zecs.systems) - internal_systems_used {
             // This loop should omit all internal systems.
             // They will be run by different parts of the engine.
@@ -61,6 +67,10 @@ game_loop :: proc() {
             ecs.run_system(system, delta_time)
         }
 
+        // Render the game.
+        ecs.zecs.should_close = graphics.render()
+
+        // Delete dead entities.
         for mask, archetype in ecs.zecs.deletion_archetypes {
             for chunk in archetype.chunks {
                 for e in chunk.entities {
@@ -72,10 +82,18 @@ game_loop :: proc() {
 
     // Finish system
     {
-        if finish_system := ecs.get_system(ecs.InternalSystems.Start); finish_system != nil {
+        if finish_system := ecs.get_system(ecs.InternalSystems.Finish); finish_system != nil {
             ecs.run_system(finish_system, 0)
         }
     }
+
+    // Deinit
+    {
+        graphics.destroy_rendering()
+    }
+
+    //assets.clear_all_managers()
+    assets.delete_all_managers()
 
     when ODIN_DEBUG {
         destroy_debug()

@@ -1,16 +1,28 @@
 package ecs
 
+import "../types"
+
 // This package contains default entities
 
 init_default_components :: proc() {
     init_timer()
 }
 
-///////////
+////////////
 // Delete //
-///////////
+////////////
 
 DeleteComponent :: struct {}
+
+///////////////
+// Transform //
+///////////////
+
+TransformComponent :: struct {
+    pos: types.Vector3,
+    rotation: quaternion128,
+    scale: types.Vector3,
+}
 
 ///////////
 // Timer //

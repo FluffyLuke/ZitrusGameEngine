@@ -1,9 +1,10 @@
 package graphics
 
-import rl "vendor:raylib"
-import "../ecs"
+import "core:fmt"
 
-Vector3 :: [3]f64
+import rl "vendor:raylib"
+
+import "../ecs"
 
 Camera :: struct {
     rl_camera: rl.Camera3D,
@@ -24,4 +25,22 @@ attach_camera :: proc(e: ecs.Entity, fov: f32 = 1, projection: CameraProjectionT
         zoom = 1,
     }
     ecs.add_component(e, new_camera)
+}
+
+SpriteComponent :: struct {
+    sprite: Sprite,
+}
+
+// Sprite must be loaded before this function can be used.
+attach_sprite_component :: proc(e: ecs.Entity, name: string) -> bool {
+    sprite := get_sprite(name)
+
+    if sprite == nil {
+        fmt.printfln("[ERROR|Graphics] Cannot create sprite component of name '%v', because sprite does not exists!", name)
+        return false
+    }
+
+    ecs.add_component(e, sprite)
+
+    return true
 }
